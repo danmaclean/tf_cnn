@@ -32,11 +32,11 @@ make_pairs <- function(f, positive_pairs){
   all_pairs <- dplyr::bind_rows(positive_pairs, negative_pairs)
 
   ##set up the tensor to hold the example pair expression data
-  x <- array(NA, dim = c(2, ncol(dat), nrow(all_pairs) ))
+  x <- array(NA, dim = c(nrow(all_pairs), 2, ncol(dat) ))
 
   #build the tensor
   for (i in 1:nrow(all_pairs)){
-    x[,,i] <- as.numeric(rbind(dat[all_pairs$TF[i], ],dat[all_pairs$Target[i], ]))
+    x[i,,] <- as.numeric(rbind(dat[all_pairs$TF[i], ],dat[all_pairs$Target[i], ]))
   }
 
 
@@ -77,8 +77,8 @@ make_data_set <- function(expression_data, regulatory_info, locus_to_probe_map )
 
 
   positive_pairs <- get_positive(regulatory_info, locus_to_probe_map)
-  make_pairs(expression_data, positive_pairs)
-
+  d <- make_pairs(expression_data, positive_pairs)
+  saveRDS(d, file = "data/arab_TF.RDS")
 }
 
 make_data_set("lib/normalised_data.csv", "lib/AtRegNet", "lib/affy_ATH1_array_elements-2010-12-20.txt")

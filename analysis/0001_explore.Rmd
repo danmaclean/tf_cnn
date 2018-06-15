@@ -1,0 +1,180 @@
+---
+title: "0001_explore"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(keras)
+library(magrittr)
+library(GA)
+```
+## Background
+
+I have a file of normalised expression values from AtGenExpress Affy ATH1 arrays abiotic stress set, a file of TF -> target interactions from [agris](https://agris-knowledgebase.org) and a set of Affy probe set to AGI locus mappings from [TAIR](http://arabidopsis.org). The TFs have been mapped to probesets and known, confirmed, direct interactions from agris used to be the basis of the positive training set. An equal number of randomly selected other pairs of probesets are used as negative training data. The expression value profiles for each pair are extracted as a training example, thus each training example is a tensor of dimension `(2,232)`, there are 8704 examples.
+
+## Aim
+
+Here we will load in the prepared Arabidopsis TF pair data and try to find a useful model structure.
+
+I believe this to be a binary classification problem. As the training data has dimensions `(2,232)` convolution can't be applied. Nor do the input tensors have any particular natural ordering on the x axis (actually there is some timecourse information here, but I think I'll ignore it for now), as it jumps. Perhaps there is a way of incorporating it later.  I'll try a dense network to start with.
+
+
+## Load data
+
+Let's load in the prepared Arabidopsis TF pair data and give it a shuffle - the data as loaded have all the positive examples at the front. We'll want a random order.
+
+```{r, load_and_shuffle}
+arab_data <- readRDS("../data/arab_TF.RDS")
+new_order <- sample(1:8704)
+shuffled_data <- list(
+  x = arab_data$x[new_order,,],
+  y = as.numeric(arab_data$y[new_order])
+)
+new_order[1]
+```
+
+## Set aside validation and training set
+
+We'll need 3 partitions of the data - train, validate (development) and test. I'll use approx 80/10/10 % split, so 6900, 902, 902. 
+
+I need to reshape the data to fit the order expected by Keras.
+
+```{r, split_sets}
+train_i <- 1:6900
+val_i <- 6901:7802
+test_i <- 7803:8704
+
+x_train <- shuffled_data$x[train_i,,] 
+x_val <- shuffled_data$x[val_i,,]
+x_test <- shuffled_data$x[test_i,,]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+
+```
+
+## Build initial network
+
+```{r, dense_network_1, eval = TRUE }
+model <- keras_model_sequential() %>%
+  layer_dense(units = 64, activation = "relu", input_shape = c(2, 232))  %>%
+  layer_dense(units = 64) %>%
+  layer_dense(units = 16) %>%
+  layer_flatten() %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+str(model)
+```
+```{r, eval = TRUE }
+history <- model %>% fit(
+  x_train,
+  y_train,
+  epochs = 20,
+  batch_size = 512, 
+  validation_data = list(x_val, y_val)
+)
+
+plot(history)
+```
+
+Not bad! A working network. I need to work out a good structure for these data. 
+
+## Explore model structure
+
+
+The approach here will be to try a range of layer numbers, and neurons per layer, use x-fold cross-validation and estimate the mean accuracy / loss for each validation at each structure. A problem is that the search space is large and there is a problem interpreting the great number of possible permutations of the layer number and layer neurons per layer.
+
+For instance, each layer could have a unique number of neurons, which makes the number of dimensions in the search space potentially very high. Consider a model with 3 layers, with testing neuron numbers 16, 32, 64. There are 6 potential orderings of each for each ordering there will be an extra dimension for first layer neurons, second layer neurons ... etc. 
+Instead of brute forcing it, or using a rectangular structure (one neuron count for all layers) I'll try a generic algorithm to optimise these two parameters.
+
+
+```{r, iterate_structures}
+
+make_model <- function(layers=3, nodes_per_layer = 16 ){
+  
+  
+  mod <- keras_model_sequential() %>%
+    layer_dense(units = nodes_per_layer, activation = "relu", input_shape = c(2, 232))
+  
+  for (l in 2:layers){
+    mod <-mod  %>%
+      layer_dense(units = nodes_per_layer )
+  }
+  
+  mod <-mod %>%
+    layer_flatten() %>%
+    layer_dense(units = 1, activation = "sigmoid")
+  
+  mod %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+  
+  mod
+}
+
+
+evaluate_model <- function(mod, x_train = NULL, y_train = NULL, 
+                           x_val = NULL, y_val = NULL, 
+                           epochs = 20, batch_size = 512, 
+                           verbose = 0){
+  mod %>% fit(
+    x_train,
+    y_train,
+    epochs = epochs,
+    batch_size = batch_size,
+    verbose = verbose
+  )
+  
+  result <- model %>% evaluate(
+    x_val,
+    y_val,
+    verbose = verbose
+  )
+
+  result$acc
+}
+
+model_accuracy <- function(x,
+                           x_train = NULL, y_train = NULL, 
+                           x_val = NULL, y_val = NULL, 
+                           epochs = 20, batch_size = 512, 
+                           verbose = 0){
+   layers <- as.integer(ceiling(x[1])) # GA function tries real valued decimals
+   nodes_per_layer <- as.integer(ceiling(x[2])) #need ints
+   m <- make_model(layers = layers, nodes_per_layer = nodes_per_layer)
+   evaluate_model(m, 
+                x_train = x_train, y_train = y_train, 
+                x_val = x_val, y_val = y_val,
+                epochs = epochs, batch_size = batch_size, 
+                verbose = verbose
+                )  
+
+
+}
+search <- ga(type = "real-valued",
+              fitness = model_accuracy, 
+              lower = c(4,4),
+              upper = c(32,64),
+              popSize = 50,
+              maxiter = 100,
+              run = 10,
+              parallel = 4,
+              x_train = x_train, y_train = y_train, x_val = x_val, y_val = y_val
+ )
+
+ str(search)
+ saveRDS(search, "srch.RDS")
+
