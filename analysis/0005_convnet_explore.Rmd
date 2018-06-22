@@ -1,0 +1,172 @@
+---
+title: "0005_convnet_explore"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(keras)
+library(magrittr)
+```
+
+
+
+## Background
+
+As per `0001_explore` I have the same dataset encoded a different way. In order to use CNN I have recoded the data into a less compact fashion with multiple channels. 
+
+The basic structure is image-like. Each sample (TF, Target pair) is a 232 x 232 matrix (there are 232 microarrays) and an expression value for the TF in channel 1, the target in channel 2.
+
+This data is scaled as described in `0004_optimise_dense_structure`
+
+I'll load it as before, however it is throwing a memory limit error on my 16Gb machine, so I'll try with an initial training set of 1000, validation 100, test, 100.
+
+
+```{r load_and_shuffle}
+
+arab_data <- readRDS("../data/scaled_arab_TF_two_channel.RDS")
+new_order <- sample(1:8704)
+shuffled_data <- list(
+  x = arab_data$x[new_order,,,],
+  y = as.numeric(arab_data$y[new_order])
+)
+
+train_i <- 1:1000
+val_i <- 6901:7001
+test_i <- 7803:7903
+
+x_train <- shuffled_data$x[train_i,,,] 
+x_val <- shuffled_data$x[val_i,,,]
+x_test <- shuffled_data$x[test_i,,,]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+
+```
+
+
+```{r, basic_convnet, cache = TRUE }
+
+model <- keras_model_sequential() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3,3), activation = "relu", input_shape = c(232,232,2)) %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3,3), activation = "relu") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%  
+  layer_conv_2d(filters = 64, kernel_size = c(3,3), activation = "relu") %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  optimizer = "rmsprop",
+  loss = "binary_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  x_train,
+  y_train,
+  epochs = 20,
+  batch_size = 512, 
+  validation_data = list(x_val, y_val)
+)
+
+plot(history)
+```
+
+So, a convnet works, the result is a bit more variable relative to the dense net and run time is about 1000 times greater for the limited datset. We could use a GPU about now! 
+
+The overall accuracy/loss is similar to the dense net. So it may be worth trying the optimised structure for the dense net straight off the bat, and see how we get on.
+
+
+```{r previous_structure_convnet}
+
+make_convnet <- function(struct = list( layers=3, nodes_per_layer = c(16,16,32) ), 
+                       with_dropout = TRUE, 
+                       dropout_rate = 0.5,
+                       with_l1 = FALSE,
+                       l1_rate = 0.001,
+                       with_l2 = FALSE,
+                       l2_rate = 0.001
+                       ){
+  
+  
+  mod <- keras_model_sequential() %>%
+    layer_conv_2d(filters = struct$nodes_per_layer[1], kernel_size = c(3,3), activation = "relu", input_shape = c(232,232,2))
+  
+  for (l in 2:struct$layers){
+      mod <- mod %>% layer_max_pooling_2d(pool_size = c(2,2)) %>%
+        layer_conv_2d(filters = struct$nodes_per_layer[l], kernel_size = c(3,3), activation = "relu")
+  }
+  
+  mod <- mod %>% layer_flatten() %>%
+  layer_dense(units = struct$nodes_per_layer[length(struct$nodes_per_layer)], activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+  
+  mod %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+  mod
+}
+```
+
+```{r}
+model1 <- tryCatch({
+  mod1_struct = list( layers = 12, nodes_per_layer = c(32,32,16,8,8,8,4,4,4,4,2,2))
+  make_convnet(struct = mod1_struct)
+},
+warning = function(w) {
+  print(paste("Warning:", w))
+}, 
+error = function(e){
+  print(paste("Error:", e))
+}
+
+)
+
+```
+
+So that idea wouldn't work. I think its related to the layer structure. The `max_pooling` operation divides the parameters by half, such that by the time we're getting to the end of the 12 layers we're in a shape mess. A smaller number of layers may work ok.
+
+Let's try the first six
+
+
+```{r, truncated_layers}
+
+model1 <- tryCatch({
+  mod1_struct = list( layers = 6, nodes_per_layer = c(32,32,16,8,8,8))
+  make_convnet(struct = mod1_struct)
+},
+warning = function(w) {
+  print(paste("Warning:", w))
+}, 
+error = function(e){
+  print(paste("Error:", e))
+}
+
+)
+
+summary(model1)
+```
+
+Great, let's train and evaluate
+
+```{r, train_truncated_model, cache = TRUE }
+history1 <- model1 %>% fit(
+  x_train,
+  y_train,
+  epochs = 20,
+  batch_size = 512, 
+  validation_data = list(x_val, y_val)
+)
+
+plot(history1)
+```
+
+So this works ok. The model isn't really much better (actually slightly worse) than the initial one I plucked out of mid air. So Im not going to pluck a good structure out of mid air based on the dense network. I'll need to run the opitimising structure again, with slightly different layer structure. Before that Im going to try to use a new input layer shape and see if that works for a convnet. 

@@ -101,6 +101,7 @@ Instead of brute forcing it, or using a rectangular structure (one neuron count 
 
 ```{r, iterate_structures}
 
+##returns a dense model of requested layers and nodes per layer
 make_model <- function(layers=3, nodes_per_layer = 16 ){
   
   
@@ -125,7 +126,7 @@ make_model <- function(layers=3, nodes_per_layer = 16 ){
   mod
 }
 
-
+# given a model and training and valiidation data returns the accuracy for a run
 evaluate_model <- function(mod, x_train = NULL, y_train = NULL, 
                            x_val = NULL, y_val = NULL, 
                            epochs = 20, batch_size = 512, 
@@ -147,23 +148,47 @@ evaluate_model <- function(mod, x_train = NULL, y_train = NULL,
   result$acc
 }
 
-model_accuracy <- function(x,
-                           x_train = NULL, y_train = NULL, 
-                           x_val = NULL, y_val = NULL, 
+
+#given a model structure (x[1] = number of layersl x[2] = number of nodes per layer)
+# builds, evaluates and returns accuracy of a model with requested structure, implementing
+# 4-fold x-validation
+model_accuracy <- function(structure_parameters, #vector structure_parameters[1] = layers
+                                                #structure+parameters[2] = nodes_per_layer
+                           #x_train = NULL, y_train = NULL, 
+                           #x_val = NULL, y_val = NULL,
+                           training_validation_x, training_validation_y, #does not include test data, only that to be k-foldes
                            epochs = 20, batch_size = 512, 
-                           verbose = 0){
+                          verbose = 0){
+  
    layers <- as.integer(ceiling(x[1])) # GA function tries real valued decimals
    nodes_per_layer <- as.integer(ceiling(x[2])) #need ints
-   m <- make_model(layers = layers, nodes_per_layer = nodes_per_layer)
-   evaluate_model(m, 
+   
+   accuracy <- c()
+   #start k-fold here
+   k <- 4 
+   indices <- sample(1:nrow(training_validation_x))
+   folds <- cut(indices, breaks = k, labels = FALSE)
+   for (i in 1:k){
+     
+     val_ind <- which(folds == i, arr.ind = TRUE)
+     x_val <- training_validation_x[val_ind,,]
+     y_val <- training_validation_y[val_ind]
+     x_train <- training_validation_x[-val_ind,,]
+     y_train <-training_validation_y[-val_ind]
+   
+     m <- make_model(layers = layers, nodes_per_layer = nodes_per_layer)
+     a <- evaluate_model(m, 
                 x_train = x_train, y_train = y_train, 
                 x_val = x_val, y_val = y_val,
                 epochs = epochs, batch_size = batch_size, 
                 verbose = verbose
-                )  
-
-
+                ) 
+     accuracy <- c(accuracy, a)
+   }
+   #end x-fold
+  return(mean(accuracy))
 }
+#1: 7802 is the 80 + 10 for training
 search <- ga(type = "real-valued",
               fitness = model_accuracy, 
               lower = c(4,4),
@@ -172,7 +197,8 @@ search <- ga(type = "real-valued",
               maxiter = 100,
               run = 10,
               parallel = 4,
-              x_train = x_train, y_train = y_train, x_val = x_val, y_val = y_val
+              training_validation_x = shuffled_data$x[1:7802,,],
+              training_validation_y = shuffled_data$y[1:7802]
  )
 
  str(search)
