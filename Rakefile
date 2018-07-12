@@ -28,6 +28,6 @@ task "data/scaled_arab_TF_two_channel.RDS" => ["data", "lib/AtRegNet", "lib/affy
   sh %{Rscript scripts/make_training_data_for_convnet.R scale}
 end
 
-task "data/scaled_arab_TF_two_channel.RDS" => ["data", "lib/AtRegNet", "lib/affy_ATH1_array_elements-2010-12-20.txt"] do
+task "data/scaled_arab_TF_one_channel.RDS" => ["data", "lib/AtRegNet", "lib/affy_ATH1_array_elements-2010-12-20.txt"] do
   sh %{Rscript scripts/make_training_data_for_convnet_one_channel.R scale}
 end

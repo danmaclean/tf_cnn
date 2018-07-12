@@ -1,0 +1,518 @@
+---
+title: "0007_convnet_optimise"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(magrittr)
+library(dplyr)
+library(tidyr)
+library(plotly)
+```
+
+## Hyperparameter optimisation for convnet
+
+I'll try and find a decent hyperparameter set for the convnet. I'll also try a `separable_2d_conv` layer. 
+
+
+### Drop in replacement of separable_2d_conv
+
+Initially just switching the `separable_2d_conv` with the usual `2d_conv`
+
+```{r, same_with_separable, cache = TRUE}
+
+
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+new_order <- sample(1:8704)
+
+shuffled_data <- list(
+  x = arab_data$x[new_order,,,, drop = F],
+  y = as.numeric(arab_data$y[new_order])
+)
+
+
+train_i <- 1:6900
+val_i <- 6901:7802
+test_i <- 7803:8704
+
+x_train <- shuffled_data$x[train_i,,, ,drop = F]
+x_val <- shuffled_data$x[val_i,,, ,drop = F]
+x_test <- shuffled_data$x[test_i,,, ,drop = F]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+
+
+model <- tryCatch({
+  keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 64, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+},
+warning = function(w) {
+  print(paste("Warning:", w))
+}, 
+error = function(e){
+  print(paste("Error:", e))
+}
+
+)
+
+summary(model)
+
+tryCatch({
+  model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+  
+  history <- model %>% fit(
+    x_train,
+    y_train,
+    epochs = 20,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+plot(history)
+},
+error = function(e){
+  print(paste("error: ", e))
+}
+)
+
+```
+
+Similar result as with the `conv_2d` layer, but perhaps a bit smoother. Validation curve is nicely tracking the training, still. The `acc` is still rising, the `loss` still dropping. The number of epochs might go up.
+
+## Structure variation
+
+I shall try building random structures as per the dense network and see what works best. Not all model structures will work. Lets quickly try and build them and see which will
+
+```{r, search_structures}
+random_structure <- function(max_layers = 4, max_nodes = 64){
+  layer_sizes <- 2 ^ (3:6) #layer size will be a power of 2, max will be 64
+  layer_sizes <- layer_sizes[layer_sizes <= max_nodes]
+  layers <- sample(2:max_layers, 1)
+  
+  list( layers = layers,
+        nodes_per_layer = sample(layer_sizes, layers, replace = TRUE), #minimum layer size is 2, 
+        dense_layer = sample(layer_sizes, 1)
+  )
+}
+
+make_model <- function(structure =  list( layers=2, nodes_per_layer = c(32,32,64) ) ){
+  
+  m <- keras_model_sequential() %>%
+      layer_separable_conv_2d(filters = structure$nodes_per_layer[1], kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2))
+    
+  for (l in 2:structure$layers){
+    m <-  m %>% layer_separable_conv_2d(filters = structure$nodes_per_layer[l], kernel_size = c(2,5), activation = "relu", padding = "same")
+        if (! l == structure$layers){
+         m <- m %>%  layer_max_pooling_2d(pool_size = c(2,2))
+        }
+  }
+  
+  m <- m %>%  
+    layer_flatten() %>%
+    layer_dense(units = structure$dense_layer, activation = "relu") %>%
+    layer_dense(units = 1, activation = "sigmoid")
+  
+  m %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+    )
+  
+  m
+}
+```
+
+```{r, check_valid_models, message = FALSE, warning=FALSE}
+
+if ( file.exists("valid_convnets.RDS")){
+  df <- readRDS("valid_convnets.RDS")
+} else {
+  df <- data.frame(layers = integer(), nodes_per_layer = integer(), dense = integer(), is_valid = logical() )
+  for(l in 1:500){
+   message(paste("trying ", l))
+   structure = random_structure()
+   r <- try( make_model(structure) )
+   if (class(r) == "try-error"){
+     r <- list(s = structure, result = FALSE)
+   }
+   else{
+     r <- list(s = structure, result = TRUE)
+   }
+  
+    d <- data.frame(
+      run_id = rep(l, r$s$layers),
+      layers = rep(r$s$layers, r$s$layers),
+      layer_id = 1:r$s$layers,
+      nodes_per_layer = r$s$nodes_per_layer,
+      dense = rep(r$s$dense_layer, r$s$layers),
+      is_valid = rep(r$result, r$s$layers)
+    )
+    
+    df <- dplyr::bind_rows(df, d)
+  
+  }
+  saveRDS(df, file = "valid_convnets.RDS")
+}
+
+```
+
+## How many convoluted layers can we have?
+
+```{r, count_convo_layers}
+
+df %>% dplyr::filter(is_valid == TRUE) %>%
+  summarize(max(layers))
+
+```
+Ok, so in 500 random layer structures, only those with two convolutional layers would even compile. Fair enough. Lets see how many different structures we get
+
+```{r, how_many_2_layers}
+
+structure_info <- df %>% dplyr::filter(is_valid == TRUE, layers == 2) %>%
+  group_by(run_id) %>%
+  mutate(tag = paste0(first(nodes_per_layer), "_", last(nodes_per_layer), "_", dense)) %>%
+  select(tag)
+
+
+unique(structure_info$tag)
+```
+
+And there are 58 different structures. I'll extract and try them all!
+
+
+```{r, extract_structures}
+
+structure_info <- structure_info %>%
+  ungroup() %>%
+  select(tag) %>%
+  distinct(tag) %>%
+  separate(tag, into = c("layer1", "layer2", "dense"), sep = "_")
+
+structure_info
+
+```
+
+```{r, message=FALSE}
+# given a model and training and valiidation data returns the accuracy for a run
+evaluate_model <- function(mod, x_train = NULL, y_train = NULL, 
+                           x_val = NULL, y_val = NULL, 
+                           epochs = 20, batch_size = 512, 
+                           verbose = 0, full_result = FALSE){
+  mod %>% fit(
+    x_train,
+    y_train,
+    epochs = epochs,
+    batch_size = batch_size,
+    verbose = verbose
+  )
+  
+  result <- mod %>% evaluate(
+    x_val,
+    y_val,
+    verbose = verbose
+  )
+  if (full_result){
+    return(result)
+  }
+  else {
+   return(result$acc) 
+  }
+} 
+
+model_accuracy <- function(structure, 
+                           training_validation_x, training_validation_y, #does not include test data, only that to be k-foldes
+                          epochs = 20, batch_size = 512, 
+                          verbose = 0){
+  
+   accuracy <- c()
+   #start k-fold here
+   k <- 4 
+   indices <- sample(1:nrow(training_validation_x))
+   folds <- cut(indices, breaks = k, labels = FALSE)
+   for (i in 1:k){
+     
+     val_ind <- which(folds == i, arr.ind = TRUE)
+     x_val <- training_validation_x[val_ind,,,, drop = F]
+     y_val <- training_validation_y[val_ind]
+     x_train <- training_validation_x[-val_ind,,,, drop = F]
+     y_train <-training_validation_y[-val_ind]
+
+     
+     
+     tryCatch({
+          m <- make_model(structure = structure )
+          
+          tryCatch(
+            {
+                a <- evaluate_model(m, 
+                  x_train = x_train, y_train = y_train, 
+                  x_val = x_val, y_val = y_val,
+                  epochs = epochs, batch_size = batch_size, 
+                  verbose = verbose
+                  ) 
+            accuracy <- c(accuracy, a)
+            },
+            warning = function(w){},
+            error = function(e){
+              cat("died evaluating model")
+              accuracy <- c(accuracy, NA)
+            }
+          )
+  
+     },
+     warning = function(w){ },
+     error = function(e){
+       cat(paste("died making model", e))
+       accuracy <- c(accuracy, NA)
+     }
+    
+     )
+     
+   }
+   #end x-fold
+  mean(accuracy, na.rm = TRUE)
+}
+
+
+run_models<- function(structure_info, outfile = "convnet_2_layer_models.RDS"){
+  
+  arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+  new_order <- sample(1:8704)
+  shuffled_data <- list(
+    x = arab_data$x[new_order,,,, drop = F],
+    y = as.numeric(arab_data$y[new_order])
+  )
+  
+  
+  result <- data.frame(model_id = integer(), 
+                       layer_id = integer(), 
+                       neurons_in_layer = integer(), 
+                       dense_layer = integer(),
+                       layers = integer(),  
+                       accuracy = double()
+  )
+  
+  for(model_id in 1:nrow(structure_info)){
+    
+    message(" running sample ", model_id)
+    structure <- list(layers = 2, nodes_per_layer = structure_info[model_id, 1:2], dense_layer = structure_info[model_id, 3])
+    accuracy <- model_accuracy(structure,
+                               training_validation_x = shuffled_data$x[1:7802,,,, drop = F],
+                               training_validation_y = shuffled_data$y[1:7802]
+    ) 
+    r <- data.frame( 
+      model_id = rep(model_id, structure$layers), 
+      layer_id = 1:structure$layers, 
+      neurons_in_layer = as.integer(structure$nodes_per_layer), 
+      layers = rep(structure$layers, structure$layers),
+      dense_layer = as.integer( rep(structure$dense_layer, structure$layers) ),
+      accuracy = rep(accuracy, structure$layers)
+    )
+    
+    result <- dplyr::bind_rows(result, r)
+  }
+  
+  saveRDS(result, outfile)
+}
+
+```
+
+```{r, check_models, eval=TRUE, message = FALSE}
+if ( ! file.exists("convnet_2_layer_models.RDS") ){
+  run_models(structure_info, outfile = "convnet_2_layer_models.RDS")
+}
+readRDS("convnet_2_layer_models.RDS")  %>%
+  group_by(model_id) %>%
+  transmute(nodes_in_first_layer = first(neurons_in_layer), nodes_in_second_layer = last(neurons_in_layer), nodes_in_dense_layer = first(dense_layer), accuracy = accuracy ) %>% ungroup() %>%
+  select(-model_id) %>% distinct() %>% arrange( desc(nodes_in_first_layer)) %>%
+  plot_ly( x = ~nodes_in_first_layer, y = ~nodes_in_second_layer, z = ~nodes_in_dense_layer, marker = list(color = ~accuracy, colorscale = c('#FFE1A1', '#683531'), showscale = TRUE)) %>%
+  add_markers() %>%
+  layout()
+
+```
+
+```{r, find_highest}
+readRDS("convnet_2_layer_models.RDS")  %>%
+  group_by(model_id) %>%
+  transmute(nodes_in_first_layer = first(neurons_in_layer), nodes_in_second_layer = last(neurons_in_layer), nodes_in_dense_layer = first(dense_layer), accuracy = accuracy ) %>% ungroup() %>%
+  select(-model_id) %>% distinct() %>% arrange( desc(accuracy))
+```
+
+The best models all have a mid (~16) first conv layer nodes and the second higher. There's not much in it, but the absolute best has 16,32 and 64 in the dense layer. I'll go with that as 'optimum'.
+
+```{r, opt_model, cache = TRUE}
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 16, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+summary(final_model)
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+  
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 20,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+plot(history)
+```
+
+Looks ok. Still the accuracy is increasing. I'll massively overtrain and see what happens
+
+```{r, opt_model_100_epochs, cache = TRUE }
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 16, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 100,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+plot(history)
+```
+
+This goes bad quick. Looks like under 20 is a decent number of epochs. To try and reduce the chance of overfitting I'd like to try the smallest similar model. As the results from above are all so close, I'll try something much smaller.
+
+
+```{r, cache = TRUE}
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 100,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+
+plot(history)
+```
+
+Goes bad slower. But still overtrains and not far off the same accuracy. The simpler model is better (Occam). So one more go at a stupid simple model.
+
+```{r, cache=TRUE}
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 100,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+
+plot(history)
+```
+
+ OK, so this looks better. Taking slightly longer to train, approx 40 epochs. but tracking training and validation really nicely. Let's take the 4,8,8 as a final model.
+
+```{r,  cache = TRUE}
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+#
+ final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 30,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+final_model %>% evaluate(x_test, y_test)
+save_model_hdf5(final_model, filepath = "../data/convnet_model.hdf5")
+
+```

@@ -1,0 +1,176 @@
+---
+title: "0008_convnet_extract"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(magrittr)
+library(ggplot2)
+```
+
+## Extracting patterns the model has learned on
+
+At this stage we have a model that can classify TF/target gene pairs at > 89%. What does it use to classify?
+
+Let's examine activations in the model.
+
+```{r}
+
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+
+two_rows <- function(){
+  
+  arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+  return(arab_data$x[sample(1:8704, 1),,, , drop = F])
+}
+
+sample_data <- two_rows()
+dim(sample_data)
+
+
+layer_outputs <- lapply(model$layers[1:3], function(layer){layer$output} )
+layer_outputs
+
+activation_model <- keras_model(inputs = model$input, outputs = layer_outputs)
+activation_model
+
+activations <- activation_model %>% predict(sample_data)
+length(activations)
+
+dim(activations[[1]])
+dim(activations[[2]])
+dim(activations[[3]])
+
+```
+
+
+So we have three layers and a few channels per layer (4,4,8). Let's try and plot.
+
+```{r, fig.width = 14}
+channels_to_df <- function(l){
+  
+  combined_df <- data.frame(value = double(), x = integer(), y = integer(), channel = integer()  ) 
+  
+  channels <- dim(l)[4]
+  x <- dim(l)[3]
+  y <- dim(l)[2]
+  for (i in 1:channels){
+    value = NULL
+    if (y == 2){
+      value = c( l[1,,,i][1,], l[1,,,i][2,] )
+    }
+    else {
+     value = c( l[1,,,i], l[1,,,i] ) 
+    }
+    df <- data.frame(
+      value = value,
+      x = rep(1:x, length.out = length(value)),
+      y = sort(rep(1:y, length.out = length(value))),
+      channel = rep(i, length(value) )
+      )
+  combined_df <- dplyr::bind_rows(combined_df, df)
+  }
+  combined_df 
+}
+
+df_layer_1 <- channels_to_df(activations[[1]])
+  ggplot(df_layer_1) + aes(x, y) + geom_tile(aes(fill = value) ) + facet_wrap(~ channel,ncol = 1)
+
+df_layer_2 <-  channels_to_df(activations[[2]])
+  ggplot(df_layer_2) + aes(x, y) + geom_tile(aes(fill = value) ) + facet_wrap(~ channel,ncol = 1)
+  
+df_layer_3 <-  channels_to_df(activations[[3]])
+  ggplot(df_layer_3) + aes(x, y) + geom_tile(aes(fill = value) ) + facet_wrap(~ channel,ncol = 1)
+
+```
+
+This isn't very helpful at all. The first layer seems to be the most relatable to the original (2,232) shaped data and if we take (1,) to be the TF and (2,) the target then the first couple of channels seem to be detecting up-regulation in the TF at a step and up-reg in the Target in the next two or so. I may inspect this pattern a little further, but it doesn't seem to show much.
+
+
+## Extracting filters
+
+Let's extract the patterns each filter is supposed to respond to.
+
+```{r, eval = T}
+summary(model)
+ 
+generate_pattern <- function(model, layer_name, filter_index, dms){
+  layer_output <- get_layer(model, layer_name)$output
+  loss <- k_mean(layer_output[,,,filter_index])
+  grads <- k_gradients(loss, model$input)[[1]]
+
+  grads <- grads / (k_sqrt(k_mean(k_square(grads))) + 1e-5)
+
+
+  iterate <- k_function(list(model$input), list(loss, grads))
+
+  c(loss_value, grads_value) %<-% iterate(list(array(0, dim = dms )))
+  input_img_data <- array(runif(prod(dms)), dim = dms )
+  
+  step <- 1
+  for (i in 1:40){
+    c(loss_value, grads_value) %<-% iterate(list(input_img_data))
+     input_img_data <- input_img_data + (grads_value + step)
+  }
+  
+  input_img_data
+}
+
+
+filters_to_df <- function(l){
+  
+  combined_df <- data.frame(value = double(), x = integer(), y = integer(), filter = integer()  ) 
+  
+  filters <- dim(l)[4]
+  x <- dim(l)[3]
+  y <- dim(l)[2]
+  for (i in 1:filter){
+    value = NULL
+    if (y == 2){
+      value = c( l[1,,,i][1,], l[1,,,i][2,] )
+    }
+    else {
+     value = c( l[1,,,i], l[1,,,i] ) 
+    }
+    df <- data.frame(
+      value = value,
+      x = rep(1:x, length.out = length(value)),
+      y = sort(rep(1:y, length.out = length(value))),
+      filter = rep(i, length(value) )
+      )
+  combined_df <- dplyr::bind_rows(combined_df, df)
+  }
+  combined_df 
+}
+
+layer_names <- c("separable_conv2d_1","max_pooling2d_1","separable_conv2d_2")
+dim_list <- list(c(1,2,232,1),  c(1,1,116,1),  c(1,1,116,1))
+for (layer_index in 1:length( layer_names ) ){
+  dms <- dim_list[[layer_index]]
+  layer_name <- layer_names[layer_index]
+  filter_to_df( generate_pattern(model, "separable_conv2d_1", 1, c(1,2,232,1)))
+}
+
+str(get_layer(model, layer)
+
+
+
+
+#a <- generate_pattern(model, "separable_conv2d_1", 1, c(1,2,232,1)) 
+
+
+#im <- generate_pattern(model, "separable_conv2d_2", 1, c(1,1,116,1)) 
+
+
+#  plot(im, type = "b")
+  
+#  channels_to_df(im)
+```
+## TODO
+
+Finish this.
+
