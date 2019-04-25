@@ -1,0 +1,51 @@
+---
+title: "tuned_model.Rmd"
+author: "Dan MacLean"
+date: "11/03/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Looks like I forgot to optimise a few parameters on the final model. Let's do that now, this will be verbose output so I'll save to a file and load back in!
+
+```{r data_setup}
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+new_order <- sample(1:8704)
+
+shuffled_data <- list(
+  x = arab_data$x[new_order,,,, drop = F],
+  y = as.numeric(arab_data$y[new_order])
+)
+
+
+train_i <- 1:6900
+val_i <- 6901:7802
+test_i <- 7803:8704
+
+x_train <- shuffled_data$x[train_i,,, ,drop = F]
+x_val <- shuffled_data$x[val_i,,, ,drop = F]
+x_test <- shuffled_data$x[test_i,,, ,drop = F]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+```
+
+```{r}
+library(tfruns)
+runs <- tuning_run("../scripts/tunable_model.R", sample = 1, echo = TRUE, flags = list(
+
+  drop1 = c(0.01, 0.05, 0.1),
+  do_drop1 = c(TRUE, FALSE),
+  do_norm1 = c(TRUE, FALSE),
+  do_norm2 = c(TRUE, FALSE),
+  epochs = c(30, 40),
+  batch_size = c(256,512)
+)
+)
+
+
+readr::write_csv(runs, "../data/tuning_runs.csv")
+```

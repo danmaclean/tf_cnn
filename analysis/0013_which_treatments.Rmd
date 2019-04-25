@@ -1,0 +1,119 @@
+---
+title: "0013_which_treatments_are_connections_in"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(stringr)
+library(plyr)
+library(keras)
+source("../scripts/utilities.R")
+```
+
+## Calculate the samples that a connection was made in
+
+For each pair of predicted pairs, it is possible to put it back through the model and see in which samples the activations are highest. This is then the sample which the connection is most likely to occur in 
+
+The prediction of TF/Target pairs was done outside the markdown using the script `scripts/run_tf_predict.R`. 
+
+```{bash eval=FALSE}
+Rscript scripts/run_tf_predict.R
+```
+
+This produced the file "predictions.csv", which has the columns 
+
+```{r echo = FALSE}
+knitr::kable(data.frame(TF_AGI = NA, TARGET_AGI = NA, TF_affy = NA, TARGET_affy = NA, prediction = NA, likelihood = NA))
+```
+
+I'll load the predictions with likelihood >= 0.99 into a dataframe and process. I'll want to add the treatment(s) the activation was strongest in later.
+
+```{r}
+pairs_to_keep <- readr::read_csv("../data/predictions.csv", 
+                col_names = c("TF_AGI", "Target_AGI", 
+                              "TF_affy", "Target_affy", 
+                              "prediction_class", "likelihood"
+                              )
+                ) %>% 
+  filter(likelihood >= 0.99)
+  
+pair_agi <- pairs_to_keep %>%
+  select(TF_AGI, Target_AGI) %>%
+  dplyr::rename(TF = TF_AGI, Target = Target_AGI)
+
+pair_affy <- pairs_to_keep %>%
+  select(TF_affy, Target_affy) %>%
+  dplyr::rename(TF = TF_affy, Target = Target_affy)
+```
+
+From this I'll extract the pairs and prepare the data structure.
+
+```{r}
+pair_agi
+#small_pairs <- pair_agi[pair_agi$TF == "AT1G01010",]
+#small_pairs
+all_pairs <- make_pair_data("../lib/normalised_data.csv", 
+                                          pair_agi, 
+                                          probe_info_file = "../lib/affy_ATH1_array_elements-2010-12-20.txt")
+
+
+pair_list <- alply(all_pairs,1)
+back_to_4d <- function(x){ array(x, dim = c(1,2, 232, 1) ) }
+pair_list <- lapply(pair_list, back_to_4d)
+```
+
+Then get the model and run the pairs back through. This gives the part of the expression profile the strongest activations is in.
+
+```{r, eval = TRUE, warning=FALSE, message=FALSE}
+
+expression_data <- load_expression_file_as_matrix(file = "../lib/normalised_data.csv")
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+
+regions <- NULL
+if (! file.exists("../data/predicted_region_profiles.RDS") ){
+  regions <- purrr::map2(pair_list, 1:length(pair_list), 
+                  .f = find_informative_expression_regions, 
+                  info = pair_affy, 
+                  expr_data = expression_data, 
+                  model = model)
+  saveRDS(regions, file = "../data/predicted_region_profiles.RDS")
+} else {
+  regions <- readRDS("../data/predicted_region_profiles.RDS")
+}
+```
+
+Then we find the samples the strongest activation profile is in, match all the information up and export.
+
+```{r}
+cel_file_info <- readr::read_csv("../lib/cel_file_info_cleaned.csv") %>% 
+  dplyr::filter(source == "AtGen") %>%
+  dplyr::filter(! str_detect(treatment, 'recovery') ) %>%
+  dplyr::select(treatment, tissue, time, replicate, sample_id) %>%
+  dplyr::mutate(cel_file_path = paste0(sample_id, ".CEL")) %>%
+  dplyr::mutate(tag = paste(treatment,tissue,time, sep="_"))
+
+
+get_treatments_and_tissue_for_interaction <- function(x, cel_file_info){
+    ns <- rownames(x$informative_region)
+    d <- tibble( name = colnames(x$informative_region) ) %>%
+      dplyr::inner_join(cel_file_info, by = c("name" = "cel_file_path" ) ) %>%
+      dplyr::select(treatment, tissue, time) 
+    d <- d %>%
+      dplyr::bind_cols( tibble(TF_affy = rep(ns[1], nrow(d))) ) %>%
+      dplyr::bind_cols( tibble(Target_affy = rep(ns[2], nrow(d))) ) %>% 
+      dplyr::mutate(TF_AGI = affy_to_agi_mapping(file = "../lib/affy_ATH1_array_elements-2010-12-20.txt")[[TF_affy]] ) %>%
+      dplyr::mutate(Target_AGI = affy_to_agi_mapping("../lib/affy_ATH1_array_elements-2010-12-20.txt")[[Target_affy]] )
+   return(d)
+}
+
+
+#run on regions with lapply()
+treatment_connections <- lapply(regions, get_treatments_and_tissue_for_interaction, cel_file_info)
+
+treatment_connections <- data.table::rbindlist(treatment_connections)
+readr::write_csv(treatment_connections, "../data/treatments_and_significant_pairs.csv")
+```

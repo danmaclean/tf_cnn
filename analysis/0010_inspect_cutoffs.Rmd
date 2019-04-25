@@ -1,0 +1,35 @@
+---
+title: "0010_inspect_cutoffs"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(ggplot2)
+```
+
+## Check predictions on known interactions.
+
+The produced convnet model can predict interaction class (is or isn't) or likelihoods. If we are to use likelihoods it would be useful to know what the distribution of the training set predictions from the model would be as a guide to developing a cutoff.
+
+Let's run the training set through the model.
+
+```{r}
+
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+
+prob_predictions <- predict_proba(model, arab_data$x)
+
+result <- data.frame(
+  keras_prob = prob_predictions, 
+  real_interaction = as.factor(arab_data$y)
+  )
+
+ggplot(result) + aes(keras_prob) + geom_density(aes(fill = as.factor(actual_class)), alpha = 0.5)
+```
+
+This is very clear! The real, confirmed interactions all come up with a very strongly bimodal distribution. Virtually all over probability 0.9. So if needed I can use quite a high cut-off.

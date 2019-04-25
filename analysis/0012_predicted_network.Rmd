@@ -1,0 +1,128 @@
+---
+title: "0012_the_predicted_network"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidygraph)
+library(ggraph)
+library(igraph)
+```
+
+## Loading the predicted network
+
+The prediction of TF/Target pairs was done outside the markdown using the script `scripts/run_tf_predict.R`. 
+
+```{bash eval=FALSE}
+Rscript scripts/run_tf_predict.R
+```
+
+This produced the file "predictions.csv", which has the columns 
+
+```{r echo = FALSE}
+knitr::kable(data.frame(TF_AGI = NA, TARGET_AGI = NA, TF_affy = NA, TARGET_affy = NA, prediction = NA, likelihood = NA))
+```
+
+I'll load the predictions with likelihood >= 0.99 into a dataframe and process into a graph. I'll reorder to use the affy names as id, since they're unique.
+
+```{r}
+interactions_df <- readr::read_csv("../data/predictions.csv", 
+                col_names = c("TF_AGI", "Target_AGI", 
+                              "TF_affy", "Target_affy", 
+                              "prediction_class", "likelihood"
+                              )
+                ) %>% 
+  filter(likelihood >= 0.99) %>%
+  select(TF_affy, Target_affy, TF_AGI, Target_AGI, prediction_class, likelihood)
+
+
+
+g <- as_tbl_graph(interactions_df, directed = TRUE, mode = "out")
+
+```
+
+## Large-scale structure
+
+### Components
+```{r}
+count_components(g)
+```
+
+### Degree distributions
+
+```{r}
+
+out_d <- degree(g,  mode = "out")
+
+table(out_d)
+
+out_degree_df <- as.data.frame(table(out_d)) %>%
+ dplyr::rename(out_degree = out_d) %>%
+ dplyr::mutate(out_degree = as.numeric(as.character(out_degree)))
+
+ggplot(out_degree_df) + aes(x = log10(out_degree + 1), y = Freq) + geom_point() +
+  scale_y_log10() + 
+  annotation_logticks(sides = "bl") + theme_bw()
+
+in_d <- degree(g,  mode = "in")
+
+table(in_d)
+in_degree_df <- as.data.frame(table(in_d)) %>%
+  dplyr::rename(in_degree = in_d) %>%
+  dplyr::mutate(in_degree = as.numeric(as.character(in_degree)))
+
+ggplot(in_degree_df) + aes(x = log10(in_degree + 1), y = Freq) + geom_point() +
+#   breaks = scales::trans_breaks("log10", function(x) 10^x),
+#  scale_y_continuous("Frequency\n(how many of them)",
+#   labels = scales::trans_format("log10", scales::math_format(10^.x))) + geom_smooth(method = "lm") + 
+#  scale_x_log10() + 
+  scale_y_log10() + 
+  annotation_logticks(sides = "bl") + theme_bw()
+
+```
+
+### In/Out Structure
+
+Divide nodes into TF/Regulator and with in/out, in only (sink), out only (source)
+
+```{r}
+tfs <- unique(interactions_df$TF_affy)
+targets <- unique(interactions_df$Target_affy)
+
+#V(g)$is_tf <- V(g)$name %in% tfs
+#V(g)$is_target <- V(g)$name %in% targets
+
+g <- g %>% activate(nodes) %>%
+  mutate(is_tf = name %in% tfs) %>%
+  mutate(out_degree = degree(g, mode = "out") ) %>%
+  mutate(in_degree = degree(g, mode = "in") ) %>% 
+  mutate(type = if_else(out_degree == 0, "sink", if_else(in_degree == 0, "source", "link"))) 
+
+ggraph(g, "hive", axis = "type", sort.by = "out_degree") + 
+  geom_edge_hive(alpha = 0.1) +
+  geom_axis_hive(aes(colour = type), label = FALSE) + coord_fixed() + theme_bw()
+
+```
+
+Looks like the majority of the edges here are source to sink, direct. Perhaps not much structure, in the network overall. Only a few of the very highest out degree sources pass to a link then presumably to a source. I'll look at the degree distributions of the types of node, then remove the source -> sink direct edges.
+
+
+```{r}
+g %>% activate(nodes) %>%
+  as_tibble() %>%
+  ggplot() + aes(out_degree) + 
+  geom_density(aes(colour= type, fill = type)) +
+  facet_wrap( ~ type, scales = "free") 
+
+g %>% activate(nodes) %>%
+  as_tibble() %>%
+  ggplot() + aes(in_degree) + 
+  geom_density(aes(colour= type, fill = type)) +
+  facet_wrap( ~ type, scales = "free") 
+```
+
+Actually, Im missing a step. This is really the wrong network to be doing this on. I need to work out which treatments the activation is happening in and analyse sub networks. Back to the drawing board!

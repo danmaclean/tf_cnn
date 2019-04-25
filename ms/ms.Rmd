@@ -46,7 +46,9 @@ Affymetrix `.cel` files were downloaded from Gene Expression Omnibus and process
 
 The `AtRegNet` database was downloaded from Agris Knowledgebase, specifically the file -  [http://agris-knowledgebase.org/Downloads/AtRegNet.zip](), from this a list of confirmed, direct regulatory transcription factor and target relationships was extracted - these form the basis of positive training examples. Arabidopsis Genome Initiative codes (AGI) for genes in AtRegNet were mapped to Affyemtrix ATH121501 probesets using information in the TAIR AFFY - AGI mapping in [https://www.arabidopsis.org/download_files/Microarrays/Affymetrix/affy_ATH1_array_elements-2010-12-20.txt](). Expression profiles for each pair of TF/target genes were extracted and labelled as positive examples. An equal number of randomly selected pairs of gene expression profiles were selected and labelled as negative training examples. A balanced dataset of 8704 training examples was produced in this way. 
 
-All code for preparation of training sets is provided in the code and data repository accompanying this manuscript.
+## Code and data
+
+All code for preparation of training sets is provided in a code and data repository accompanying this manuscript.
 
 
 ## Development of deep neural networks

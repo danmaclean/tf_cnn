@@ -50,7 +50,7 @@
 % using explicit options in \includegraphics[width, height, ...]{}
 \setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
 
-\title{A tool for predicting positive regulators of genes using a deep learning model trained on ATGenExpress Stress transcriptome data  }
+\title{A Convolutonal Neural Network for predicting transcriptional regulators of genes reveals classification based on positive regulatory interactions  }
 
 
 
@@ -98,7 +98,7 @@
             bookmarks=true,
             pdfauthor={Dan MacLean () and  (The Sainsbury Laboratory, University of East Anglia, Norwich Research Park, Norwich, UK, NR4 7JJ, \href{mailto:dan.maclean@tsl.ac.uk}{\nolinkurl{dan.maclean@tsl.ac.uk}})},
              pdfkeywords = {},  
-            pdftitle={A tool for predicting positive regulators of genes using a deep learning model trained on ATGenExpress Stress transcriptome data},
+            pdftitle={A Convolutonal Neural Network for predicting transcriptional regulators of genes reveals classification based on positive regulatory interactions},
             colorlinks=true,
             citecolor=blue,
             urlcolor=blue,
@@ -152,7 +152,7 @@
 
     \vskip 8.5pt % \small 
 
-\noindent My Abstract
+\noindent Gene Regulatory networks that control gene expression are widely studied yet the interaction that make them up are difficult to predict from high throughput data. Deep Learning methods such as convolutional neural networks can perform surprisingly good classifications on a variety of data types and the matrix-like gene expression profiles would seem to be ideal input data for deep learning approaches. In this short study I compiled training sets of expression data using the AtGenExpress global stress expression data set and known transcription factor-target interactions from the Arabidopsis PLACE database. I built and optimised convolutional neural networks with a best model providing 95 \% accuracy of classification on a held-out validation set. Investigation of the activations within this model revealed that classification was based on positive correlation of expression profiles in short sections. This result shows that a convolutional neural network can be used to make classifications and reveal the basis of those calssifications for gene expression data sets, indicating that a convolutional neural network is a useful and interpretable tool for exploratory classification of biological data. The final model is available for download and as a web application.
 
 
     \hbox{\vrule height .2pt width 39.14pc}
@@ -188,7 +188,10 @@ Affymetrix \texttt{.cel} files were downloaded from Gene Expression Omnibus and 
 
 The \texttt{AtRegNet} database was downloaded from Agris Knowledgebase, specifically the file - \href{}{http://agris-knowledgebase.org/Downloads/AtRegNet.zip}, from this a list of confirmed, direct regulatory transcription factor and target relationships was extracted - these form the basis of positive training examples. Arabidopsis Genome Initiative codes (AGI) for genes in AtRegNet were mapped to Affyemtrix ATH121501 probesets using information in the TAIR AFFY - AGI mapping in \href{}{https://www.arabidopsis.org/download\_files/Microarrays/Affymetrix/affy\_ATH1\_array\_elements-2010-12-20.txt}. Expression profiles for each pair of TF/target genes were extracted and labelled as positive examples. An equal number of randomly selected pairs of gene expression profiles were selected and labelled as negative training examples. A balanced dataset of 8704 training examples was produced in this way.
 
-All code for preparation of training sets is provided in the code and data repository accompanying this manuscript.
+\hypertarget{code-and-data}{%
+\subsection{Code and data}\label{code-and-data}}
+
+All code for preparation of training sets is provided in a code and data repository accompanying this manuscript.
 
 \hypertarget{development-of-deep-neural-networks}{%
 \subsection{Development of deep neural networks}\label{development-of-deep-neural-networks}}

@@ -1,0 +1,340 @@
+---
+title: "polished_plots"
+author: "Dan MacLean"
+date: "08/03/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Polished Plots
+
+Here I'll adapt some figures from the analysis for better presentation
+
+### Analysis of different model structures
+
+This is a re-working of the figure in [0007_convnet_optimise.html](), the 3D one about the effect of different model structures on accuracy
+
+```{r figure1, cache=TRUE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)
+
+models <- readRDS("convnet_2_layer_models.RDS")
+
+f1 <- spread(models, layer_id, neurons_in_layer) %>% 
+  rename("filters_in_layer_1" = "1", "filters_in_layer_2" =  "2") %>% 
+  ggplot() + 
+  aes(as.factor(filters_in_layer_1), as.factor(filters_in_layer_2)) + 
+  geom_point(aes(size = accuracy, colour = accuracy)) + 
+  facet_wrap(~ dense_layer) + 
+  theme_bw() + 
+  labs(x = "filters in layer 1", y = "filters in layer 2") + 
+  theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 8), axis.title = element_text(size = 15) ) +
+  scale_color_viridis(breaks = c(0.85, 0.91)) + theme(legend.position="bottom", legend.title = element_blank())
+f1 
+#ggsave("figure1.png", width = 210,  height = 297, units = "mm")
+#ggsave("figure1.pdf", width = 210,  height = 297, units = "mm")
+```
+
+
+### Testing 'Best' Model Structures
+
+This is a reworking of the test of the 'best' model structures searched above.
+
+I'll have to rerun the models, so loading in the data and going from the start with the 'best' model - the `16,32,64` model.
+
+```{r, figure2a,cache=TRUE}
+library(keras)
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+new_order <- sample(1:8704)
+
+shuffled_data <- list(
+  x = arab_data$x[new_order,,,, drop = F],
+  y = as.numeric(arab_data$y[new_order])
+)
+
+
+train_i <- 1:6900
+val_i <- 6901:7802
+test_i <- 7803:8704
+
+x_train <- shuffled_data$x[train_i,,, ,drop = F]
+x_val <- shuffled_data$x[val_i,,, ,drop = F]
+x_test <- shuffled_data$x[test_i,,, ,drop = F]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 16, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 64, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+  
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 30,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+f2a <- plot(history) + theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE)
+
+f2a
+```
+
+Now the `8,32,16`.
+
+```{r, figure2b,cache=TRUE}
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 32, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 16, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 100,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+
+f2b <- plot(history) + theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE)
+
+f2b
+```
+
+Now the smaller `4,8,8` model.
+```{r, figure2c, cache = TRUE}
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+
+  history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 100,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+
+f2c <- plot(history) + theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE)
+
+f2c
+```
+
+Now the shorter version.
+
+```{r, f2d, cache=TRUE}
+
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+#
+ history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 20,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+ 
+f2d <- plot(history) + theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE)
+
+f2d
+
+final_model %>% evaluate(x_test, y_test)
+
+```
+
+
+Let's get the training curve for the final tuned model.
+
+```{r, fig2e,cache=TRUE}
+library(keras)
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dropout(0.01) %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+#
+history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 30,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+f2e <- plot(history)+ theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE)
+
+```
+
+A composite of those figures, best is a and e. 
+
+```{r, f2, fig.width=5, fig.height=7}
+
+library(cowplot)
+legend_b <- get_legend(f2a + theme(legend.position="bottom", legend.title = element_blank()))
+f2a <- f2a + theme(legend.position = "none", axis.text.y = element_text(size= 8), plot.margin = unit(c(1,0,0,0), "lines"))
+f2e <- f2e + theme(legend.position = "none", axis.text.y = element_text(size= 8), plot.margin = unit(c(1,0,0,0), "lines"))
+
+f2 <- plot_grid(f2a, f2e, legend_b, labels = c("A", "B"), align = "v", ncol = 1, rel_heights = c(1, 1,.2))
+
+f2
+
+#ggsave("figure2.png", width = 210,  height = 297, units = "mm")
+#ggsave("figure2.pdf", width = 210,  height = 297, units = "mm")
+```
+
+### Comparing predictions with true class across the whole set
+
+```{r, fig3, cache = TRUE}
+library(keras)
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+
+prob_predictions <- predict_proba(model, arab_data$x)
+
+result <- data.frame(
+  keras_prob = prob_predictions, 
+  actual_class = as.factor(arab_data$y)
+  )
+
+f3 <- ggplot(result) + aes( actual_class, keras_prob) + geom_jitter( aes(colour = actual_class), alpha=0.1 ) + theme_minimal() + geom_violin(aes(colour = actual_class)) + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + 
+  theme(legend.position = "none") + 
+  labs(x = "Actual Class", y= "(p) interaction is true from model ") + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE) + scale_x_discrete(limits=c(TRUE,FALSE)) #geom_density(aes(fill = as.factor(actual_class)), alpha = 0.5)
+
+f3
+
+#ggsave("figure3.png", width = 210,  height = 297, units = "mm")
+#ggsave("figure3.pdf", width = 210,  height = 297, units = "mm")
+```
+
+
+
+### Extracting the activation information
+
+Here we'll build the plots that reveal what was going on with the activations. I'll plot Kmean cluster means of the clustered activated regions of the expression profiles of TF/Target pairs. I'll also show the scree plot for the number of clusters
+
+
+
+```{r, fig4, cache=TRUE}
+library(magrittr)
+cluster_mean_profiles <- readRDS("cluster_mean_profiles.RDS")
+f4b <- cluster_mean_profiles %>%
+  filter(position <= 25) %>%
+  ggplot() + 
+  aes(position, value ) + 
+  geom_line(aes(colour = type) ) + 
+  facet_wrap(~ cluster, scales= "free_y", ncol= 1) + 
+  theme_minimal() + 
+  theme(axis.text = element_text(size = 12), strip.text = element_text(size = 12)) + 
+  #theme(legend.text = element_text(size = 16), axis.title = element_text(size = 15) ) + 
+  labs(y = NULL) + scale_colour_viridis(discrete=TRUE) +scale_fill_viridis(discrete = TRUE) + labs(x = "Activated Position", y = "Expression Estimate") + theme(legend.title = element_blank(), legend.position = "bottom" )
+#ggsave("figure4.png", width = 210,  height = 297, units = "mm")
+#ggsave("figure4.pdf", width = 210,  height = 297, units = "mm")
+```
+
+```{r, fig4a, fig.height=12}
+library(factoextra)
+pca_pma <- readRDS("pca_cluster_estimate.RDS")
+f4a <- fviz_eig(pca_pma)
+
+f4 <- cowplot::plot_grid(f4a, f4b, labels = c("A", "B"), ncol = 2, rel_heights = c(1,1))
+f4
+```
+
+
+```{r}
+ggsave("figure1.png", plot=f1, width = 90,  height = 90, units = "mm")
+ggsave("figure1.pdf", plot=f1, width = 90,  height = 90, units = "mm")
+ggsave("figure2.png", plot=f2, width = 90,  height = 120, units = "mm")
+ggsave("figure2.pdf", plot=f2, width = 90,  height = 120, units = "mm")
+ggsave("figure3.png", plot=f3, width = 90,  height = 90, units = "mm")
+ggsave("figure3.pdf", plot=f3, width = 90,  height = 90, units = "mm")
+ggsave("figure4.png", plot=f4, width = 90,  height = 90, units = "mm")
+ggsave("figure4.pdf", plot=f4, width = 90,  height = 90, units = "mm")

@@ -1,0 +1,60 @@
+---
+title: "0014_treatment_networks"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidygraph)
+library(ggraph)
+library(igraph)
+source("../scripts/utilities.R")
+```
+
+## What are the networks like?
+
+The premise of extracting TF-target edges and compiling a network, as prepared for in the previous analysis, is not such a good one. I can't compile a full network, because for each TF-target pair predicted as interacting we only have one activation peak (the biggest one), so the full range of treatments a TF-target is present in isn't represented. The network could only show a TFs strongest interactions. 
+
+It may be possible to infer the other treatments, with a better extraction function. But it would be hard to calibrate it. 
+
+Building and analysing the network structure is probably a bit out of scope, then. With this analysis.
+
+
+```{r}
+net_data <- readr::read_csv("../data/treatments_and_significant_pairs.csv") %>%
+  dplyr::select(TF_affy, Target_affy, TF_AGI, Target_AGI, treatment, tissue, time) %>%
+  dplyr::mutate(edge_tag = paste0(TF_affy, "-", Target_affy))
+
+summarized <- net_data %>% 
+  group_by(treatment, tissue) %>%
+  summarize(edges = n_distinct(edge_tag),
+            targets = n_distinct(Target_affy),
+            tfs = n_distinct(TF_affy),
+            tf_ids = list(treatment = unique(TF_affy) )
+            )
+names(summarized$tf_ids) <- paste0(summarized$treatment, "_", summarized$tissue)
+```
+
+## How are TFs shared by the different treatments?
+
+Of the treatments that could be extracted, which TFs crop up in multiple, or interesting sets
+
+```{r}
+library(UpSetR)
+upset(
+  fromList(summarized$tf_ids),
+  sets = sort(names(summarized$tf_ids), decreasing = TRUE),
+  keep.order = TRUE,
+  order.by = "freq",
+  mb.ratio = c(0.55, 0.45)
+  )
+```
+
+This figure shows the treatment/tissue combinations and the overlap of found TFs.
+
+There are 19 in all treatments; 4 in everything but heat; 3 in everything not osmotic, not cold; 2 not salt not osmotic.
+
+Interesting to see what they are. How they're related.  

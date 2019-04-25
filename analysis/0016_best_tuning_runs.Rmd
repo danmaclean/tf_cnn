@@ -1,0 +1,99 @@
+---
+title: "Extract_best_runs"
+author: "Dan MacLean"
+date: "11/03/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Let's look at the best tuning runs from [0015_tuning_runs.html]().
+
+
+
+```{r }
+runs <- readr::read_csv("../data/tuning_runs.csv")
+library(dplyr)
+best_models <- 
+  runs %>%
+  filter(metric_val_acc > 0.95) %>% 
+  select(model, metric_val_acc, ) %>%
+  arrange(desc(metric_val_acc))
+best_models 
+strsplit(best_models$model, "\\n", perl = "TRUE")
+
+
+```
+
+
+Interesting, the best performing model has just one batch_norm layer in the convolutional layer and just one dropout layer. Here's the parameters for those layers.
+
+```{r}
+  runs %>%
+  filter(metric_val_acc > 0.95) %>% 
+  select(model, metric_val_acc, flag_drop1, flag_batch_size, flag_epochs) %>%
+  arrange(desc(metric_val_acc))
+
+```
+
+Let's recreate that and look at it in more detail.
+
+```{r}
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+new_order <- sample(1:8704)
+
+shuffled_data <- list(
+  x = arab_data$x[new_order,,,, drop = F],
+  y = as.numeric(arab_data$y[new_order])
+)
+
+
+train_i <- 1:6900
+val_i <- 6901:7802
+test_i <- 7803:8704
+
+x_train <- shuffled_data$x[train_i,,, ,drop = F]
+x_val <- shuffled_data$x[val_i,,, ,drop = F]
+x_test <- shuffled_data$x[test_i,,, ,drop = F]
+
+y_train <- shuffled_data$y[train_i]
+y_val <- shuffled_data$y[val_i]
+y_test <- shuffled_data$y[test_i]
+
+
+
+
+library(keras)
+final_model <- keras_model_sequential() %>%
+  layer_separable_conv_2d(filters = 4, kernel_size = c(2,5), activation = "relu", input_shape = c(2,232,1), padding = "same") %>%
+  layer_max_pooling_2d(pool_size = c(2,2)) %>%
+  layer_separable_conv_2d(filters = 8, kernel_size = c(2,5), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_flatten() %>%
+  layer_dense(units = 8, activation = "relu") %>%
+  layer_dropout(0.01) %>%
+  layer_dense(units = 1, activation = "sigmoid")
+
+
+#
+
+  final_model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = c("accuracy")
+  )
+#
+history <- final_model %>% fit(
+    x_train,
+    y_train,
+    epochs = 30,
+    batch_size = 512, 
+    validation_data = list(x_val, y_val)
+  )
+
+plot(history)
+final_model %>% evaluate(x_test, y_test)
+save_model_hdf5(final_model, filepath = "../data/convnet_model.hdf5")
+```

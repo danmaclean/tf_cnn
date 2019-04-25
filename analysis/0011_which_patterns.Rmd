@@ -1,0 +1,333 @@
+---
+title: "0011_which_patterns"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(zoo)
+library(quantmod)
+library(plyr)
+library(purrr)
+library(factoextra)
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+library(tidyr)
+```
+
+## Which bits of the expression profile is the classification coming from
+
+The model can be used to tell us which parts of an expression profile are most useful in its classification. So we can use this to make a catalogue of all the expression profiles that it is classifying with. For each pair of expression profiles we need to extract the most useful parts. 
+
+The last convolutional layer of the model will be the one that has the useful stuff.
+
+```{r}
+arab_data <- readRDS("../data/scaled_arab_TF_one_channel.RDS")
+keep <- arab_data$y == 1
+positive_pairs <- arab_data$x[keep,,, ,drop = FALSE]
+positive_pair_info <- arab_data$pair_info[keep,]
+
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+#predictions <- model %>% predict(positive_pairs)
+model
+```
+
+So, `separable_conv2d_2`. Let's code up a function to extract activations in the layer when an expression profile pair is passed through.
+
+```{r}
+
+get_class_activation_values <- function(expression_pair, model, layer = "separable_conv2d_2"){
+
+  last_conv_layer <- model %>% get_layer(layer)
+  real_interaction_output <- model$output[,1]
+  grads <- k_gradients(real_interaction_output, last_conv_layer$output)[[1]]
+  pooled_grads <- k_mean(grads, axis = c(1,2,3))
+  
+  iterate <- k_function(list(model$input),
+                        list(pooled_grads, last_conv_layer$output[1,,,])
+  )
+  
+  c(pooled_grads_value, conv_layer_output_value) %<-% iterate(list(expression_pair))
+  
+  for (i in 1:8){
+    conv_layer_output_value[,,i] <- conv_layer_output_value[,,i] * pooled_grads_value[[i]]
+  }
+  
+  activations <- apply(conv_layer_output_value, c(1,2), mean)
+  return(activations)
+}
+```
+
+Now run it for the first positive pair to get the activation levels. We should get a vector of activations of length 116, same as the final convnet layer. 
+```{r}
+input_profile <- positive_pairs[1,,, , drop = FALSE]
+
+act_levels <- get_class_activation_values(input_profile, model, layer = "separable_conv2d_2")
+
+dim(act_levels)
+plot(y= act_levels, x = 1:116, type = "b")
+```
+
+The values are all lower than 0 in this set. Scale around 0.
+
+```{r}
+#this scales around 0, so now all the largeest values are > 0
+scaled_acts <-scale( act_levels[1,] )
+plot(y= scaled_acts[,1], x = 1:116, type = "b")
+```
+
+Set anything less than 0 to 0. 
+
+```{r}
+zeroed_scaled_acts <- pmax(scaled_acts, 0)
+plot(y= zeroed_scaled_acts, x = 1:116, type = "b")
+```
+
+Scale in range 0..1
+
+```{r}
+normalised_acts <- zeroed_scaled_acts / max(zeroed_scaled_acts)
+plot(y= normalised_acts, x = 1:116, type = "b")
+
+```
+
+Put in a function for later.
+
+```{r}
+normalise_activations <- function(acts){
+  acts <- scale( acts[1,] ) #scale around 0
+  acts <- pmax(acts, 0) #anything < 0 to 0
+  return(acts / max(acts) ) #normalise 0..1
+}
+
+norm_acts <- normalise_activations(act_levels)
+plot(y= norm_acts, x = 1:116, type = "b")
+```
+
+
+Now try smoothing, `spar = 0.4` is quite strong.
+```{r, eval = TRUE}
+
+spsm <- smooth.spline(norm_acts, spar = 0.4)
+plot(y = spsm$y, x = 1:116, type = "b")
+```
+
+Now get peaks of activation.
+```{r}
+findPeaks(spsm$y)
+findValleys(spsm$y)
+```
+
+We now have a way to extract the highest activate region and thus the patterns from the expression dataset. I'll build these into functions, put them in source file so I can extract patterns for all pairs.
+
+```{r}
+source("../scripts/utilities.R")
+```
+
+
+Here's how we get an expression sub profile for one region
+```{r,cache = TRUE}
+
+peaks<- find_biggest_peak_indices(norm_acts)
+peaks$start <- peaks$start * 2
+peaks$end <- peaks$end * 2#because the convnet layer is half the width of the expression data
+
+expression_data <- load_expression_file_as_matrix(file = "../lib/normalised_data.csv")
+
+exprs <- get_expression_subprofile(expression_data, 
+                          positive_pair_info$TF[1], 
+                          positive_pair_info$Target[1], 
+                          peaks$start, peaks$end,
+                          sub_only = TRUE)
+
+exprs
+peaks
+```
+
+### Running extraction on input data. 
+
+Let's try running the extraction on a few samples
+
+```{r }
+pp_list <- alply(positive_pairs,1)
+
+back_to_4d <- function(x){ array(x, dim = c(1,2, 232, 1) ) }
+pp_list <- lapply(pp_list, back_to_4d) #put the objects in the list back to the proper dim
+regions <- NULL
+if (! file.exists("../data/region_profiles.RDS") ){
+  regions <- map2(pp_list, 1:4352, 
+                  .f = find_informative_expression_regions, 
+                  info = positive_pair_info, 
+                  expr_data = expression_data, 
+                  model = model)
+
+} else {
+  regions <- readRDS("../data/region_profiles.RDS")
+}
+```
+
+
+Ok, lets check how many pairs we found peaks for. Quick correction - remove all width 0 peaks.
+
+```{r}
+reset_zero_width_peaks <- function(x){
+  if(x$peaks$start == x$peaks$end){
+    x$peaks$start <- x$peaks$end <- x$informative_region <- NA
+  }
+  return(x)
+}
+regions <-lapply(regions, reset_zero_width_peaks) 
+
+got_peak <- function(x){ length(x$informative_region) >= 2 }
+sum(unlist(lapply(regions, got_peak)))
+
+```
+
+All but one of them!
+
+To visualise them we'll need to have them all the same length. And in one dimension. I'll subtract the TF from the Target and pad to length and build a matrix. I'll scale the resulting vector too, to iron out size differences
+
+```{r, cache = TRUE}
+
+ls <- unlist(lapply(regions, function(x){length(x$informative_region )}))
+hist(ls)
+max_l <- max(ls)
+normalise_expression_sub_profile <- function(x, ml = 138, smooth= FALSE){
+  if( is.na(x$peaks$start) & is.na(x$peaks$end)){
+    return(rep(0, ml))
+  }
+  else{
+    sp <- scale(x$informative_region[2, ] - x$informative_region[1,])
+    if (smooth & length(x$informative_region) >= 4) {
+      
+      sp <- tryCatch({
+        return(c(
+        smooth.spline(sp, spar = 0.4), 
+        rep(0, (ml - length(sp)))
+              )
+        )
+      }
+      , warning = function(w){
+            return(c(sp, rep(0, (ml - length(sp)))))
+      }, error = function(e){
+            return(c(sp, rep(0, (ml - length(sp)))))
+      })
+    }
+    return(c(sp, rep(0, (ml - length(sp)))))
+  }
+  
+}
+
+normalised_profiles <- lapply(regions, normalise_expression_sub_profile, ml = max_l)
+```
+
+```{r, fig.width = 13, fig.height=13, cache = TRUE}
+normalised_profiles[[1]]
+ma <-t(matrix(unlist(normalised_profiles, use.names = FALSE), nrow = max_l))
+head(ma)
+heatmap(ma, na.rm = TRUE, Colv = NA)
+```
+
+There are some discernible patterns. They all seem to be ones that change rapidly, so very clear increases then decreases of one relative to the others. Not sure that subtracting one from the other is very helpful, though. Need a way to keep the information from the two rows of the expression profile. 
+
+Let's try clustering and getting representative profiles from the clusters.
+
+```{r}
+linear_and_scale <- function(x, ml = 138){
+    if( is.na(x$peaks$start) & is.na(x$peaks$end)){
+    return(rep(0, ml))
+  }
+  scale(
+    c( x$informative_region[1, ], 
+       rep(0, (ml  / 2 ) -  (length(x$informative_region[1,])) ),
+       x$informative_region[2, ], 
+       rep(0, (ml / 2) -  (length(x$informative_region[1,]))  ) 
+    )
+  )
+       
+   # c(x$informative_region[1, ], 
+  #    x$informative_region[2,])) , 
+  #  rep(0, (ml -  (length(x$informative_region[1,]) *2 ) ) )
+  
+}
+
+
+padded_profiles <- lapply(regions,linear_and_scale, ml = max_l * 2)
+#padded_profiles <- map2(regions, ll, linear_and_scale, ml = max_l * 2)
+
+pma <-t(matrix(unlist(padded_profiles, use.names = FALSE), nrow = max_l * 2))
+heatmap(pma, Colv = NA)
+
+dim(pma)
+```
+
+```{r}
+pca_pma <- prcomp(pma, scale = FALSE)
+fviz_eig(pca_pma)
+saveRDS(pca_pma, "pca_cluster_estimate.RDS")
+fviz_nbclust(pma, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+nclus <- 3
+kms <- kmeans(pma, nclus, nstart = 20)
+barplot(kms$size)
+
+
+cluster_mean_profiles <- list() 
+
+for (i in 1:nclus){
+  
+  l <- length(kms$centers[i,])#sum( ! kms$centers[i,] == 0) # need to extract the tf target portion of the linearised profile
+
+  cluster_mean_profiles[[i]] <- data.frame(
+    cluster = rep(i, l), 
+    type = c(rep("TF", l / 2), rep("Target", l / 2)),
+    value = kms$centers[i,1:l],
+    position = c( seq(1:(l/2)), seq(1:(l/2)) )
+    )
+}
+cluster_mean_profiles <- do.call("rbind", cluster_mean_profiles)
+```
+```{r}
+ggplot(cluster_mean_profiles) + aes(position, value ) + geom_line(aes(colour = type) ) + facet_wrap(~ cluster, scales= "free_x")
+
+```
+```{r}
+
+cluster_mean_profiles %>%
+ spread(type, value) %>%
+  ggplot() + aes(TF, Target) + geom_point() + facet_wrap(~ cluster)
+
+```
+
+Some very clear patterns here. Basically these are positively correlated patterns of expression. So the expression relationships are ones where the TF transcript abundance mirrors the TF target abundance. The large curves at the RHS are caused by the padding of the clusters with zero. It may be informative to remove the padded parts. Also in earlier sections, perhaps there is a way to do sub clustering without so much padding.
+
+I estimate the unpadded part of the clusters to be about 25, 25 and 12 long respectively, so I'll filter and replot.
+
+
+```{r}
+cluster_mean_profiles %>%
+  filter(position <= 25) %>%
+ggplot + aes(position, value ) + geom_line(aes(colour = type) ) + facet_wrap(~ cluster, scales= "free_x")
+
+cluster_mean_profiles %>%
+ spread(type, value) %>%
+    filter(position <= 25) %>%
+  ggplot() + aes(TF, Target) + geom_point() + facet_wrap(~ cluster) 
+
+saveRDS(cluster_mean_profiles, "cluster_mean_profiles.RDS")
+```
+
+``` 
+position = expression value position in the expression value file, 
+value = expression estimate
+TF on x axi really means TF expression estimate
+Target on y axis really means Target expression estimate
+```
+
+And now this clears it up even further. The first cluster is showing positive correlation from an initial constistent set of expression values, the second is showing positive correlation from expression values that are in the same ratio and level and the third cluster pattern is more variable at the start but essentially like the first  

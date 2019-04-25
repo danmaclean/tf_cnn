@@ -8,3 +8,4 @@ analysis/runs
 analysis/polished_plots_cache
 analysis/polished_plots_files
 tmp/
+*_cache
