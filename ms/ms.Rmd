@@ -48,7 +48,7 @@ The `AtRegNet` database was downloaded from Agris Knowledgebase, specifically th
 
 ## Code and data
 
-All code for preparation of training sets is provided in a code and data repository accompanying this manuscript.
+All code for preparation of training sets is provided in a code and data repository at [https://github.com/danmaclean/tf_cnn]().
 
 
 ## Development of deep neural networks
