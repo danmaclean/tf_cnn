@@ -1,0 +1,8 @@
+{
+  "do_drop1": true,
+  "drop1": 0.1,
+  "do_norm1": true,
+  "do_norm2": true,
+  "batch_size": 512,
+  "epochs": 40
+}

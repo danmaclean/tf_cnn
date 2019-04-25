@@ -1,0 +1,41 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop1", TRUE, "use dropout after first conv layer"), 
++     flag_numeric("drop1", 0.01, "Dropout for the pooling"),  .... [TRUNCATED] 
+
+> model <- keras_model_sequential()
+
+> model %>% layer_separable_conv_2d(filters = 4, kernel_size = c(2, 
++     5), activation = "relu", input_shape = c(2, 232, 1), padding = "same") %>%  .... [TRUNCATED] 
+
+> if (FLAGS$do_norm1) {
++     model %>% layer_batch_normalization()
++ }
+
+> model %>% layer_separable_conv_2d(filters = 8, kernel_size = c(2, 
++     5), activation = "relu", padding = "same")
+
+> if (FLAGS$do_norm2) {
++     model %>% layer_batch_normalization()
++ }
+
+> model %>% layer_flatten()
+
+> model %>% layer_dense(units = 8, activation = "relu")
+
+> if (FLAGS$do_drop3) {
++     model %>% layer_dropout(FLAGS$drop3)
++ }
+
+> layer_dense(units = 1, activation = "sigmoid")
+<keras.layers.core.Dense>
+
+> model %>% compile(optimizer = "rmsprop", loss = "binary_crossentropy", 
++     metrics = c("accuracy"))
+
+> model %>% fit(x_train, y_train, epochs = FLAGS$epochs, 
++     batch_size = FLAGS$batch_size, validation_data = list(x_val, 
++         y_val))

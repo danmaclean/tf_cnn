@@ -1,0 +1,62 @@
+---
+title: "0009_predict"
+author: "Dan MacLean"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(magrittr)
+source("../scripts/utilities.R")
+```
+
+## Starting predicting from the model
+
+With a final model built, I now want to run the thing on all TF/gene pairs in the expression data and predict whether there is an interaction. Let's do a dry run for that and benchmark run times, memory etc. 
+
+I'll need a dataframe of all pairs of TFs and protein coding genes. I'll work TF-wise, so I'll make an array of TFs.
+
+TFs are from the list in "lib/Ath_TF_list" extracted from [plant tf db](http://planttfdb.cbi.pku.edu.cn/download/TF_list/Ath_TF_list.gz) (can be extracted automatically with the Rakefile). There are ...
+
+```{r}
+length( get_tfs(file = "../lib/Ath_TF_list") )
+```
+
+Protein Coding genes are from Thalemine, in the list in "lib/all_agis.txt" extracted using the script "scripts/get_gene_names.rb" (also in the Rakefile). There are ...
+
+```{r}
+length( get_non_tfs(file = "../lib/all_agis.txt") )
+```
+
+Making a maximum `r 1717 * 27862` pairs. Note that known interactions from the training data are removed from the list of pairs on loading, so the final number is slightly less.
+
+```{r}
+all_pairs <- pair_dataframe(interaction_file = "../lib/AtRegNet", 
+                            tf_file = "../lib/Ath_TF_list", 
+                            non_tf_file = "../lib/all_agis.txt")
+dim(all_pairs)
+```
+
+## Benchmark a single TF
+
+Let's quickly look at how long this might take. For a single TF and all other genes as its target (1717th of the whole data), I'll extract the expression data and make predictions, checking runtime as I go. 
+
+```{r, cache = TRUE}
+system.time({ small_pairs <- all_pairs[all_pairs$TF == "AT5G10140", ] })
+dim(small_pairs)
+## check data structure building runtime
+system.time( {single_tf <- make_pair_data("../lib/normalised_data.csv", 
+                                          small_pairs, 
+                                          probe_info_file = "../lib/affy_ATH1_array_elements-2010-12-20.txt") } )
+object.size(single_tf)
+```
+
+```{r}
+model <- load_model_hdf5("../data/convnet_model.hdf5")
+system.time( { result <- predict(model, single_tf) } )
+```
+
+
+Ok, so it takes < 1 minute per TF and 7Mb memory. I'll script this up to run each TF in parallel and bring the dataframes back together. 

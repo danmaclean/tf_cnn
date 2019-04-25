@@ -1,0 +1,8 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop1", TRUE, "do layer1dropout"), 
++     flag_numeric("drop1", 0.01, "drop 1 rate"), flag_boolean("do_norm1", 
++    .... [TRUNCATED] 

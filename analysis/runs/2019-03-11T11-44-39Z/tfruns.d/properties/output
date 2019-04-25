@@ -1,0 +1,12 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop1", TRUE, "use dropout after first conv layer"), 
++     flag_numeric("drop1", 0.01, "Dropout for the pooling"),  .... [TRUNCATED] 
+
+> model <- keras_model_sequential()
+
+> model %>% layer_separable_conv_2d(filters = 4, kernel_size = c(2, 
++     5), activation = "relu", input_shape = c(2, 232, 1), padding = "same") %>%  .... [TRUNCATED] 

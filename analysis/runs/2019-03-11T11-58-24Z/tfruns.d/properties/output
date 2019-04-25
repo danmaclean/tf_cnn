@@ -1,0 +1,25 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop3", TRUE, "do layer1dropout"), 
++     flag_numeric("drop3", 0.01, "drop 1 rate"), flag_boolean("do_norm1", 
++    .... [TRUNCATED] 
+
+> final_model <- keras_model_sequential() %>% layer_separable_conv_2d(filters = 4, 
++     kernel_size = c(2, 5), activation = "relu", input_shape = c( .... [TRUNCATED] 
+
+> final_model %>% compile(optimizer = "rmsprop", loss = "binary_crossentropy", 
++     metrics = c("accuracy"))
+
+> final_model %>% fit(x_train, y_train, epochs = 30, 
++     batch_size = 512, validation_data = list(x_val, y_val))
+
+> final_model %>% evaluate(x_test, y_test)
+$loss
+[1] 0.1969574
+
+$acc
+[1] 0.9268293
+

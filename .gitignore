@@ -4,3 +4,7 @@
 .Ruserdata
 tfs.Rproj
 .DS_Store
+analysis/runs
+analysis/polished_plots_cache
+analysis/polished_plots_files
+tmp/

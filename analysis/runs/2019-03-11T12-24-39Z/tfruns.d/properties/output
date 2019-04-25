@@ -1,0 +1,49 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop1", TRUE, "do layer1dropout"), 
++     flag_numeric("drop1", 0.01, "drop 1 rate"), flag_boolean("do_norm1", 
++    .... [TRUNCATED] 
+
+> final_model <- keras_model_sequential() %>% layer_separable_conv_2d(filters = 4, 
++     kernel_size = c(2, 5), activation = "relu", input_shape = c( .... [TRUNCATED] 
+
+> if (FLAGS$do_norm1) {
++     final_model %>% layer_batch_normalization()
++ }
+
+> final_model %>% layer_max_pooling_2d(pool_size = c(2, 
++     2))
+
+> final_model %>% layer_separable_conv_2d(filters = 8, 
++     kernel_size = c(2, 5), activation = "relu", padding = "same")
+
+> if (FLAGS$do_norm2) {
++     final_model %>% layer_batch_normalization()
++ }
+
+> final_model %>% layer_flatten()
+
+> final_model %>% layer_dense(units = 8, activation = "relu")
+
+> if (FLAGS$do_drop1) {
++     final_model %>% layer_dropout(FLAGS$drop1)
++ }
+
+> final_model %>% layer_dense(units = 1, activation = "sigmoid")
+
+> final_model %>% compile(optimizer = "rmsprop", loss = "binary_crossentropy", 
++     metrics = c("accuracy"))
+
+> final_model %>% fit(x_train, y_train, epochs = 30, 
++     batch_size = 512, validation_data = list(x_val, y_val))
+
+> final_model %>% evaluate(x_test, y_test)
+$loss
+[1] 0.1509358
+
+$acc
+[1] 0.9523282
+

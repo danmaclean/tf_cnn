@@ -513,6 +513,6 @@ final_model <- keras_model_sequential() %>%
     validation_data = list(x_val, y_val)
   )
 final_model %>% evaluate(x_test, y_test)
-save_model_hdf5(final_model, filepath = "../data/convnet_model.hdf5")
+save_model_hdf5(final_model, filepath = "../data/convnet_model_prelim.hdf5")
 
 ```

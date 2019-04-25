@@ -1,0 +1,317 @@
+\documentclass[12pt,a4paper,]{article}
+\usepackage[left=1in,top=1in,right=1in,bottom=1in]{geometry}
+\newcommand*{\authorfont}{\fontfamily{phv}\selectfont}
+\usepackage[]{sans}
+
+
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+
+
+
+\usepackage{abstract}
+\renewcommand{\abstractname}{}    % clear the title
+\renewcommand{\absnamepos}{empty} % originally center
+
+\renewenvironment{abstract}
+ {{%
+    \setlength{\leftmargin}{0mm}
+    \setlength{\rightmargin}{\leftmargin}%
+  }%
+  \relax}
+ {\endlist}
+
+\makeatletter
+\def\@maketitle{%
+  \newpage
+%  \null
+%  \vskip 2em%
+%  \begin{center}%
+  \let \footnote \thanks
+    {\fontsize{18}{20}\selectfont\raggedright  \setlength{\parindent}{0pt} \@title \par}%
+}
+%\fi
+\makeatother
+
+
+
+
+\setcounter{secnumdepth}{0}
+
+\usepackage{longtable,booktabs}
+
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+
+\title{A tool for predicting positive regulators of genes using a deep learning model trained on ATGenExpress Stress transcriptome data  }
+
+
+
+\author{\Large Dan MacLean\vspace{0.05in} \newline\normalsize\emph{}   \and \Large \vspace{0.05in} \newline\normalsize\emph{The Sainsbury Laboratory, University of East Anglia, Norwich Research Park, Norwich, UK, NR4 7JJ, \href{mailto:dan.maclean@tsl.ac.uk}{\nolinkurl{dan.maclean@tsl.ac.uk}}}  }
+
+
+\date{}
+
+\usepackage{titlesec}
+
+\titleformat*{\section}{\normalsize\bfseries}
+\titleformat*{\subsection}{\normalsize\itshape}
+\titleformat*{\subsubsection}{\normalsize\itshape}
+\titleformat*{\paragraph}{\normalsize\itshape}
+\titleformat*{\subparagraph}{\normalsize\itshape}
+
+
+\usepackage{natbib}
+\bibliographystyle{apsr}
+\usepackage[strings]{underscore} % protect underscores in most circumstances
+
+
+
+\newtheorem{hypothesis}{Hypothesis}
+\usepackage{setspace}
+
+\makeatletter
+\@ifpackageloaded{hyperref}{}{%
+\ifxetex
+  \PassOptionsToPackage{hyphens}{url}\usepackage[setpagesize=false, % page size defined by xetex
+              unicode=false, % unicode breaks when used with xetex
+              xetex]{hyperref}
+\else
+  \PassOptionsToPackage{hyphens}{url}\usepackage[unicode=true]{hyperref}
+\fi
+}
+
+\@ifpackageloaded{color}{
+    \PassOptionsToPackage{usenames,dvipsnames}{color}
+}{%
+    \usepackage[usenames,dvipsnames]{color}
+}
+\makeatother
+\hypersetup{breaklinks=true,
+            bookmarks=true,
+            pdfauthor={Dan MacLean () and  (The Sainsbury Laboratory, University of East Anglia, Norwich Research Park, Norwich, UK, NR4 7JJ, \href{mailto:dan.maclean@tsl.ac.uk}{\nolinkurl{dan.maclean@tsl.ac.uk}})},
+             pdfkeywords = {},  
+            pdftitle={A tool for predicting positive regulators of genes using a deep learning model trained on ATGenExpress Stress transcriptome data},
+            colorlinks=true,
+            citecolor=blue,
+            urlcolor=blue,
+            linkcolor=magenta,
+            pdfborder={0 0 0}}
+\urlstyle{same}  % don't use monospace font for urls
+
+% set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+
+
+
+% add tightlist ----------
+\providecommand{\tightlist}{%
+\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+\begin{document}
+	
+% \pagenumbering{arabic}% resets `page` counter to 1 
+%
+% \maketitle
+
+{% \usefont{T1}{pnc}{m}{n}
+\setlength{\parindent}{0pt}
+\thispagestyle{plain}
+{\fontsize{18}{20}\selectfont\raggedright 
+\maketitle  % title \par  
+
+}
+
+{
+   \vskip 13.5pt\relax \normalsize\fontsize{11}{12} 
+\textbf{\authorfont Dan MacLean} \hskip 15pt \emph{\small }   \par \textbf{\authorfont } \hskip 15pt \emph{\small The Sainsbury Laboratory, University of East Anglia, Norwich Research Park, Norwich, UK, NR4 7JJ, \href{mailto:dan.maclean@tsl.ac.uk}{\nolinkurl{dan.maclean@tsl.ac.uk}}}   
+
+}
+
+}
+
+
+
+
+
+
+
+
+\begin{abstract}
+
+    \hbox{\vrule height .2pt width 39.14pc}
+
+    \vskip 8.5pt % \small 
+
+\noindent My Abstract
+
+
+    \hbox{\vrule height .2pt width 39.14pc}
+
+
+\end{abstract}
+
+
+\vskip 6.5pt
+
+
+\noindent  \hypertarget{introduction}{%
+\section{Introduction}\label{introduction}}
+
+Gene regulatory networks are molecular interaction networks that control the expression of genes. These networks play essential roles in all aspects of cellular activity, acting as integrators of cell signalling pathways and acting as one layer of control of the abundance of necessary proteins in the cell. The transcriptional component of these networks comprises the core transcriptional machinery and numerous condition specific protein transcription factors that bind promoters of target genes and affect, positively or negatively, the rate of transcription of the gene. Further control of the effect of the gene and its protein can be mitigated by modification of the translation rate, protein processing and other biochemical states downstream.
+
+Such networks have therefore been a topic of much study, the wide range of permutations of transcription factor target gene interactions means experimentally cataloguing them is expensive and time consuming, though high-throughput methods do exist and are among the most reliable data sources. Nonetheless the difficulty of these methods have inspired efforts to infer networks from more tractable and easily performed experiments. Some notable areas have been the prediction of transcription factor and target gene relationships \emph{de novo} from models created by inference from data such as DNA sequence of target genes, binding experiments such as ChIPSeq and transcript abundance data from microarrays or RNAseq \citep[\citet{friedmaninferring2004},\citet{buttediscoverin2000},\citet{liangreveal1998}]{willesparse2004}. These tools integrate various information including known binding site information, expression levels and co-expression profiles to predict regulatory interactions and assemble entire networks.
+
+The AtGenExpress global stress expression data set \citep{kilianatgenexpress2007} is a compendium of transcript expression studies carried out on the model plant \emph{Arabidopsis thaliana} during various abiotic stress challenges including cold, drought, genotoxic, osmotic, oxidative, salt, UV-B and wounding. The data set was generated with the Affymetrix ATH1 gene chip \citep{redman2004} which contains probesets representing approximately 23750 genes. This chip has been widely used with over 14000 samples using it submitted to the GEO expression omnibus \citep{barrett2013}. There are numerous databases of experimentally demonstrated transcription factor and targets in Arabidopsis, such as AGRIS \citep{palaniswamy2006}, PLACE and PlantCARE. The AtRegNet database contains around 4000 confirmed direct regulatory interactions.
+
+Deep learning models based on neural networks have seen surprisingly good results in varied classification problems in recent years. Convolutional Neural Networks (CNNs) are a subclass of neural network that have been applied in image classification and facial recognition \citep[\citet{lawrence1997}]{krizhevsky2012}, drug discovery \citep{wallach2015}, time series data \citep{pyrkov2018} and natural language processing \citep{collobert2008}. CNNs operate by composing local features into a larger hierarchical model. They achieve this by convolution of input data, essentially restriction of the input into smaller filters that are transformed into an output feature map \citep{lawrence1997}. The application of these convolution layers downsamples the data while retaining pattern information and creates filter hierarchies by looking at proportionally larger sections of the input. Training of these models requires a classified set of data with positive and negative examples such that the model can learn to discriminate. The expression profiles in the AtGenExpress data and the known interactions in AtRegNet provide data from which such classified training sets can be made. As a proof-of-technology experiment I constructed a CNN from these data. The resulting model has strong predictive power and I document the model development and an associated web-tool below. The model can be used to predict \emph{Arabidopsis} TF/gene relationships in abiotic stress and may be useful for researchers investigating gene function in abiotic stress.
+
+\hypertarget{methods}{%
+\section{Methods}\label{methods}}
+
+\hypertarget{preparation-of-atgenexpress-abiotic-stress-microarray-data}{%
+\subsection{Preparation of AtGenExpress abiotic stress microarray data}\label{preparation-of-atgenexpress-abiotic-stress-microarray-data}}
+
+Affymetrix \texttt{.cel} files were downloaded from Gene Expression Omnibus and processed. All 232 \texttt{.cel} files under GEO accessions GSE33790, GSE33996, GSE5620, GSE5621, GSE5622, GSE5623, GSE5624, GSE5625, GSE5626, GSE5627 and GSE5628 (see \texttt{supplemental\_1\_cleaned\_cel\_file\_info.csv} for all details of files used). These files were quantile normalised using RMA \citep{Irizarry2003} with median polishing. The normalised log-transformed expression data were used as input data for training sets.
+
+\hypertarget{preparation-of-training-test-and-hold-out-validation-sets-from-normalised-array-data}{%
+\subsection{Preparation of training, test and hold-out validation sets from normalised array data}\label{preparation-of-training-test-and-hold-out-validation-sets-from-normalised-array-data}}
+
+The \texttt{AtRegNet} database was downloaded from Agris Knowledgebase, specifically the file - \href{}{http://agris-knowledgebase.org/Downloads/AtRegNet.zip}, from this a list of confirmed, direct regulatory transcription factor and target relationships was extracted - these form the basis of positive training examples. Arabidopsis Genome Initiative codes (AGI) for genes in AtRegNet were mapped to Affyemtrix ATH121501 probesets using information in the TAIR AFFY - AGI mapping in \href{}{https://www.arabidopsis.org/download\_files/Microarrays/Affymetrix/affy\_ATH1\_array\_elements-2010-12-20.txt}. Expression profiles for each pair of TF/target genes were extracted and labelled as positive examples. An equal number of randomly selected pairs of gene expression profiles were selected and labelled as negative training examples. A balanced dataset of 8704 training examples was produced in this way.
+
+All code for preparation of training sets is provided in the code and data repository accompanying this manuscript.
+
+\hypertarget{development-of-deep-neural-networks}{%
+\subsection{Development of deep neural networks}\label{development-of-deep-neural-networks}}
+
+All neural network models were developed using the \texttt{keras} library (version 2.2.4) in R (version 3.5.2), an API for the TensorFlow library (version 1.10). All code was developed in RStudio (version 1.1.463) and is provided in the code and data repository accompanying this manuscript.
+
+\hypertarget{development-of-web-application}{%
+\subsection{Development of web application}\label{development-of-web-application}}
+
+The web facing version of the tool was developed using the R \texttt{shiny} package (version 1.2.0) and is hosted on \texttt{shiny.io} at \href{}{https://danmaclean.shinyapps.io/query\_pairs}.
+
+\hypertarget{results}{%
+\section{Results}\label{results}}
+
+\hypertarget{developing-a-convolutional-neural-network-to-classify-tftarget-pairs}{%
+\subsection{Developing a Convolutional Neural Network to classify TF/Target pairs}\label{developing-a-convolutional-neural-network-to-classify-tftarget-pairs}}
+
+I extracted expression profiles for the 4351 TF/Target pairs from the normalised expression data, labelled these as positive training examples and generated a further 4351 random pairs of expression profiles, to be labelled as negative training examples. This resulted in a tensor of dimension \texttt{8702,\ 232,\ 2}. The tensor was shuffled, and divide so that 80 \% was used for training, 10 \% validation and 10 \% final hold-out test (6900, 901, 901 profiles per set, respectively).
+
+As the individual data are relatively small (2 x 232 matrices) a small model with few layers was tried. I built a separable CNN with two convolutional layers separated by a Max Pooling layer, the convolutional layers feed into a single dense layer before the final classification layer. The \texttt{relu} function was used as the activation in all layers except the final dense which was \texttt{sigmoid}. The objective function was \texttt{binary\ crossentropy} and the optimiszer was RMSprop in all runs. Also a batch size of 512 was used. All runs lasted for 30 epochs of training. This basic structure is summarised in Figure \ref{fig:networkdiagram}.
+
+\begin{figure}
+
+{\centering \includegraphics[width=0.7\linewidth,height=0.7\textheight]{conv1} 
+
+}
+
+\caption{Schematic of initial small CNN model. 2x232 input matrices are fed into a first convolutional layer, a maximum pooling layer, a second convolutional layer then a dense network layer after flattening.}\label{fig:networkdiagram}
+\end{figure}
+
+\hypertarget{estimating-hyperparameters}{%
+\subsection{Estimating hyperparameters}\label{estimating-hyperparameters}}
+
+As a first step it was necessary to estimate appropriate hyperparameters of the candidate CNN model. I performed evaluations of the model at different filter and unit counts for the CNN and dense layers. The values were varied through \texttt{8,16,32\ and\ 64} and each combination was tested for accuracy on a hold out validation set at the 30th epoch. The accuracy at the 30th epoch is presented in Fig \ref{fig:paramscan}. The models each showed accuracy greater than 85\% with the highest 91\%. In general higher filter and unit counts gave higher hold out validation accuracy, with the highest being the 64/32 filters per convolutional layer and dense layer.
+
+\begin{figure}
+\centering
+\includegraphics{../analysis/figure1.pdf}
+\caption{\label{fig:paramscan}Hyperparameter scan for varied filter and unit counts for a two CNN and one dense layer model. Spot size and colours represent accuracy at the 30th epoch.}
+\end{figure}
+
+On inspection of the training history the individual best models could be seen to be overfitting slightly with increases in loss at the end of the training period (Figure \ref{fig:largevssmall} A).
+
+\begin{figure}
+\centering
+\includegraphics{../analysis/figure2.pdf}
+\caption{\label{fig:largevssmall}Accuracy and Loss profiles over training history for training and validation set for a model with A) 32,64/32 filters per convolutional layer/dense layer. B) 4,8/4 in the respective layers.}
+\end{figure}
+
+Hence, I selected and tested smaller models manually with slightly lower accuracies to move into a next tuning phase to investigate the effect of regularizations on the accuracy. I made a new base model of \texttt{4,8} filters in the convolutional layers and \texttt{4} in the dense layer as this showed an accuracy of 0.89 without indication of overtraining.
+
+To finally tune this model I ran further iterations run adding or leaving out batch normalisation layers after convolutional layers and dropout layers after dense layers. I also varied batch size and epoch number. Table \ref{tab:topmodels} show the result and configuration for the top 5 most accurate runs.
+
+\begin{table}[t]
+
+\caption{\label{tab:topmodels}Top 5 runs of a small CNN network model with optional added batch normalisation and dropout layers showing configurations and values.}
+\centering
+\resizebox{\linewidth}{!}{
+\begin{tabular}{r|r|l|l|l|r|r|r}
+\hline
+Val Acc & Val Loss & Norm Layer 1 Used & Norm Layer 2 Used & Dropout Used & Dropout Rate & Batch Size & Epochs\\
+\hline
+0.9568 & 0.1311 & FALSE & TRUE & TRUE & 0.01 & 512 & 30\\
+\hline
+0.9545 & 0.1282 & FALSE & TRUE & FALSE & 0.01 & 512 & 40\\
+\hline
+0.9534 & 0.1147 & TRUE & TRUE & TRUE & 0.05 & 512 & 30\\
+\hline
+0.9512 & 0.1424 & FALSE & TRUE & TRUE & 0.01 & 256 & 30\\
+\hline
+0.9512 & 0.1464 & FALSE & TRUE & TRUE & 0.10 & 256 & 40\\
+\hline
+\end{tabular}}
+\end{table}
+
+The most accurate run showed no indication of overtraining at 30 epochs (Figure \ref{fig:largevssmall} B. I selected this as a final model and evaluated on the heretofore unseen hold-out validation set for which it showed accuracy of 0.95 and loss of 0.137.
+
+\hypertarget{distribution-of-classification-probabilities-across-the-entire-training-set}{%
+\subsection{Distribution of classification probabilities across the entire training set}\label{distribution-of-classification-probabilities-across-the-entire-training-set}}
+
+A useful model would be one that had a clear separation of classifications for positive and negative examples, to understand this for my model I examined the distributions of classification probabilities. I supplied the model with the training data and used it to return probabilities that each training example was a positive example and cross referenced this with the actual class. In the vast majority of cases the classification probability was very close to 0 for negative training examples: 82 percent of points were less than 0.05. Similarly classification probability was very close to 1 for positive training examples: 86 percent of points were greater than 0.95 (Figure \ref{fig:prob}).
+
+\begin{figure}
+\centering
+\includegraphics{../analysis/figure3.pdf}
+\caption{\label{fig:prob}Distribution of model generated probabilities of training examples being a true interacting pair}
+\end{figure}
+
+\hypertarget{assessing-the-signals-the-model-uses-to-classify}{%
+\subsection{Assessing the signals the model uses to classify}\label{assessing-the-signals-the-model-uses-to-classify}}
+
+An advantage of CNNs relative to other deep neural networks is their relative interpretability. A CNN can be exploited to extract activation maps when provided with data, these maps can highlight the regions of the input to which the CNN is most strongly responding - IE which portion of the expression profiles the model is classifying with. To examine the responses of the model, I ran the training data back through and extracted network activations. These profiles were smoothed and the single largest peak per profile extracted. The expression estimates corresponding to these peaks were extracted and clustered. Numbers of clusters were estimated using principal components analysis and clustering performed with \(k\)-means clustering, \(k = 3\), Figure \ref{fig:activationprofiles} A. The mean cluster profiles were extracted and can be seen in Figure \ref{fig:activationprofiles} B. All the mean profiles show a positive correlation between the target and TF, indication that this model is classifying based on positively correlated changes in transcript abundance between target and TF.
+
+\begin{figure}
+\centering
+\includegraphics{../analysis/figure4.pdf}
+\caption{\label{fig:activationprofiles}A) Scree plot following principal component analysis of clustered TF/Gene expression profile in regions of highest CNN activation. B) Mean expression profiles of k-means clusters with expression profile extracted from region of highest CNN activation}
+\end{figure}
+
+\hypertarget{a-webtool-incorporating-the-model-so-that-can-be-easily-used-for-prediction}{%
+\subsection{A webtool incorporating the model so that can be easily used for prediction}\label{a-webtool-incorporating-the-model-so-that-can-be-easily-used-for-prediction}}
+
+To make the tool directly useful to researchers without need for developing code, I created a small webtool that takes gene lists as input and returns the probability of regulation according to the model. This model is available at \href{}{https://danmaclean.shinyapps.io/query\_pairs}. The use can supply a list of AGI or Affy format identifiers as potential regulators and as potential target genes. The tool will then apply the model and return a table indicating the prediction probability of each interaction. A figure showing the distribution of the interaction probabilities relative to the training set used in this study is also generated. The user can download the table in spreadsheet friendly format.
+
+\hypertarget{discussion}{%
+\section{Discussion}\label{discussion}}
+
+In this study I trained and tuned a convolutional neural network using Affymetrix microarray data from \emph{Arabidopsis} plants subjected to abiotic stress. The network was trained on expression profile data in a series of small \texttt{2\ x\ 232} matrices. The network trained quickly, in under three minutes on a common laptop configuration. With tuning and hyperparameter optimisation the network achieved accuracy of 95\% on around 6000 training examples without overfitting. The produced model seemed to be classifying on positive correlations within the expression profiles. This makes the model a useful tool, in a certain niche. Those who are interested in predicting positive \emph{Arabidopsis} TF and target relationships in abiotic stress would find it useful.
+
+The model is limited and some caveats should be taken seriously. The primary thing to note is that the activiation patterns I observed were positive, and the model appears only to classify on these. Negatively correlated patterns will not be predicted as true classes. A true negative regulator of expression will probably not classify with the model.
+
+A behaviour like this is probably inherited from the training set. Positively correlated interactions would seem to be the ones most easy to discover and verify and therefore the most numerous sort of interaction in the biological experiments from which the interaction data were distilled.
+
+The model could be extended, the relatively small AtGenExpress expression dataset could be replaced by larger more sensitive and expansive RNAseq datasets for input expression profiles.
+
+The most important aspect of the work presented here is that it was straightforward to build and optimise an effective deep learning classifier on a small-ish training set (thousands rather than millions of training examples) without large compute resources. The work is an excellent example of how datasets generated by individual laboratories could be utilised in deep learning. By taking the optimisation strategy and model structure described here as a starting point many small local datasets could be put to use in myriad classification exercises.
+
+
+
+
+\newpage
+\singlespacing 
+\renewcommand\refname{References}
+\bibliography{bibliography.bib}
+
+\end{document}

@@ -1,0 +1,17 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop3", TRUE, "do layer1dropout"), 
++     flag_numeric("drop3", 0.01, "drop 1 rate"), flag_boolean("do_norm1", 
++    .... [TRUNCATED] 
+
+> model <- keras_model_sequential()
+
+> model %>% layer_separable_conv_2d(filters = 4, kernel_size = c(2, 
++     5), activation = "relu", input_shape = c(2, 232, 1), padding = "same") %>%  .... [TRUNCATED] 
+
+> layer_separable_conv_2d(filters = 8, kernel_size = c(2, 
++     5), activation = "relu", padding = "same") %>% layer_flatten() %>% 
++     layer_dense .... [TRUNCATED] 

@@ -1,0 +1,15 @@
+
+> library(keras)
+
+> library(magrittr)
+
+> FLAGS <- flags(flag_boolean("do_drop1", TRUE, "do layer1dropout"), 
++     flag_numeric("drop1", 0.01, "drop 1 rate"), flag_boolean("do_norm1", 
++    .... [TRUNCATED] 
+
+> final_model <- keras_model_sequential() %>% layer_separable_conv_2d(filters = 4, 
++     kernel_size = c(2, 5), activation = "relu", input_shape = c( .... [TRUNCATED] 
+
+> if (FLAGS$norm1) {
++     final_model %>% layer_batch_normalization()
++ }
